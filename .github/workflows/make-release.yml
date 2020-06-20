@@ -21,11 +21,10 @@ jobs:
       - name: Install Flutter
         run: |
           git clone https://github.com/flutter/flutter.git -b beta --depth 1 ~/.flutter_dist
-          echo $ANDROID_SDK $ANDROID_SDK_ROOT
           yes | ~/.flutter_dist/bin/flutter doctor --android-licenses
       - name: Build Android bundle
         run: ~/.flutter_dist/bin/flutter build appbundle
-      - name: Create Release ${{ steps.set_env.outputs.SOURCE_TAG }}
+      - name: Create Release
         id: create_release
         uses: actions/create-release@v1.1.1
         env:
@@ -43,3 +42,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./build/app/outputs/bundle/release/app.aab
           asset_name: android-bundle-${{ steps.set_env.outputs.SOURCE_TAG }}.aab
+          asset_content_type: 'application/octet-stream'
