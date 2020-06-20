@@ -1,0 +1,22 @@
+name: Build and make Release
+on:
+  push:
+    tags:
+    - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+jobs:
+  build:
+    name: Build Android package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: set up JDK
+        uses: actions/setup-java@v1.3.0
+        with:
+          java-version: 1.8
+      - name: Install Flutter
+        run: |
+          git clone https://github.com/flutter/flutter.git -b beta --depth 1 ~/.flutter_dist
+          ~/.flutter_dist/bin/flutter doctor
+      - name: Build with Gradle
+        run: ./gradlew build
