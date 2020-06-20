@@ -17,10 +17,11 @@ jobs:
       - name: Install Flutter
         run: |
           git clone https://github.com/flutter/flutter.git -b beta --depth 1 ~/.flutter_dist
-          ~/.flutter_dist/bin/flutter doctor --android-licenses
+          yes | sdkmanager --licenses
+          ~/.flutter_dist/bin/flutter doctor
       - name: Build Android bundle
         run: ~/.flutter_dist/bin/flutter build appbundle
-      - name: Create Release
+      - name: Create Release ${{ github.ref }}
         id: create_release
         uses: actions/create-release@v1.1.1
         env:
@@ -30,7 +31,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: true
-      - name: Upload Release Asset
+      - name: Upload Release Asset 
         uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
