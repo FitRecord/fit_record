@@ -24,6 +24,9 @@ jobs:
           git clone https://github.com/flutter/flutter.git -b beta --depth 1 ~/.flutter_dist
           yes | ~/.flutter_dist/bin/flutter doctor --android-licenses
       - name: Build Android bundle
+        env:
+          ORG_GRADLE_PROJECT_keyPassword: ${{ secrets.PLAY_STORE_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_ndkVersion: '21.1.6352462'
         run: ~/.flutter_dist/bin/flutter build appbundle --build-name=${{ steps.set_env.outputs.SOURCE_TAG }} --build-number=${{ steps.set_env.outputs.BUILD_NUMBER }}
       - name: Create Release
         id: create_release
