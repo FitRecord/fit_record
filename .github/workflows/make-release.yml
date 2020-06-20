@@ -10,6 +10,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: 'Set environment'
+        id: set_env
+        run: |
+          echo ::set-output name=SOURCE_TAG::${GITHUB_REF#refs/tags/}
       - name: set up JDK
         uses: actions/setup-java@v1.3.0
         with:
@@ -21,14 +25,14 @@ jobs:
           yes | ~/.flutter_dist/bin/flutter doctor --android-licenses
       - name: Build Android bundle
         run: ~/.flutter_dist/bin/flutter build appbundle
-      - name: Create Release ${{ github.ref }}
+      - name: Create Release ${{ steps.set_env.outputs.SOURCE_TAG }}
         id: create_release
         uses: actions/create-release@v1.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          release_name: Release ${{ steps.set_env.outputs.SOURCE_TAG }}
           draft: false
           prerelease: true
       - name: Upload Release Asset 
@@ -38,4 +42,4 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./build/app/outputs/bundle/release/app.aab
-          asset_name: android-bundle.aab
+          asset_name: android-bundle-${{ steps.set_env.outputs.SOURCE_TAG }}.aab
