@@ -31,11 +31,20 @@ class HistoryPane extends MainPaneState {
     _load(context);
   }
 
+  Future _addRecord(BuildContext ctx) async {
+    await _RecordEditor.open(ctx, widget.provider);
+    return _load(ctx);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('History'),
+        actions: [
+          IconButton(
+              icon: Icon(Icons.add), onPressed: () => _addRecord(context))
+        ],
       ),
       body: RefreshIndicator(
           child: ListView.builder(
@@ -383,5 +392,203 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         child: Icon(Icons.done),
       ),
     );
+  }
+}
+
+class _RecordEditor extends StatefulWidget {
+  final DataProvider _provider;
+
+  const _RecordEditor(this._provider);
+
+  static Future open(BuildContext ctx, DataProvider provider) => Navigator.push(
+      ctx,
+      MaterialPageRoute(
+          builder: (ctx) => _RecordEditor(provider), fullscreenDialog: true));
+
+  @override
+  State<StatefulWidget> createState() => _RecordEditorState();
+}
+
+class _RecordEditorState extends State<_RecordEditor> {
+  List<Profile> _profiles;
+  Profile _profile;
+  TextEditingController _title, _description, _distance, _duration;
+  DateTime _dateTime;
+
+  final _formID = GlobalKey<FormState>();
+
+  _load(BuildContext ctx) async {
+    try {
+      final list = await widget._provider.profiles.all();
+      setState(() {
+        _profiles = list;
+        _profile = list.first;
+      });
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _dateTime = _fromDateTime(DateTime.now(), TimeOfDay.now());
+    _title = TextEditingController();
+    _description = TextEditingController();
+    _distance = TextEditingController(text: '0');
+    _duration = TextEditingController(text: '0:00');
+    _load(context);
+  }
+
+  DateTime _fromDateTime(DateTime date, TimeOfDay time) =>
+      DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+  _selectDate(BuildContext ctx) async {
+    final date = await showDatePicker(
+        context: ctx,
+        initialDate: _dateTime,
+        firstDate: _dateTime.add(Duration(days: -365 * 100)),
+        lastDate: _dateTime);
+    if (date != null) {
+      print('New date: $_dateTime $date');
+      setState(() {
+        _dateTime = _fromDateTime(date, TimeOfDay.fromDateTime(_dateTime));
+      });
+    }
+  }
+
+  _selectTime(BuildContext ctx) async {
+    final time = await showTimePicker(
+      context: ctx,
+      initialTime: TimeOfDay.fromDateTime(_dateTime),
+    );
+    if (time != null) {
+      setState(() {
+        _dateTime = _fromDateTime(_dateTime, time);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget body = Container();
+    if (_profiles != null) {
+      final dropDown = DropdownButtonFormField<Profile>(
+          value: _profile,
+          items: _profiles.map((e) {
+            return DropdownMenuItem(
+                value: e,
+                child: Row(
+                  children: [profileIcon(e), Text(e.title)],
+                ));
+          }).toList(),
+          onChanged: (p) => setState(() => _profile = p));
+      final items = <Widget>[
+        dropDown,
+        TextFormField(
+          controller: _title,
+          textCapitalization: TextCapitalization.sentences,
+          maxLines: 1,
+          decoration: InputDecoration(labelText: 'Title:'),
+        ),
+        TextFormField(
+          controller: _description,
+          textCapitalization: TextCapitalization.sentences,
+          maxLines: null,
+          decoration: InputDecoration(labelText: 'Description:'),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+                child: Text(
+              '${dateTimeFormat().format(_dateTime)}',
+              style: Theme.of(context).primaryTextTheme.bodyText1,
+            )),
+            IconButton(
+                icon: Icon(Icons.calendar_today),
+                onPressed: () => _selectDate(context)),
+            IconButton(
+                icon: Icon(Icons.access_time),
+                onPressed: () => _selectTime(context))
+          ],
+        ),
+        TextFormField(
+          controller: _duration,
+          maxLines: 1,
+          decoration: InputDecoration(labelText: 'Duration:'),
+          validator: (value) => _validateDuration(value),
+        ),
+        TextFormField(
+          controller: _distance,
+          maxLines: 1,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          decoration: InputDecoration(labelText: 'Distance (in km):'),
+          validator: (value) => _validateDistance(value),
+        ),
+      ];
+      body = Form(
+          key: _formID,
+          autovalidate: false,
+          child: ListView(
+            children: items
+                .where((el) => el != null)
+                .map((e) => Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: e,
+                    ))
+                .toList(),
+          ));
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('New Activity'),
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: Icon(Icons.done),
+        onPressed: () => _save(context),
+      ),
+      body: body,
+    );
+  }
+
+  int _parseDuration(String value) {
+    final parts = value.split(':').map((s) => int.tryParse(s, radix: 10));
+    if (parts.contains(null)) {
+      return null;
+    }
+    return parts.reduce((value, element) => value * 60 + element);
+  }
+
+  String _validateDuration(String value) {
+    int val = _parseDuration(value);
+    if (val == null || val < 0) return 'Invalid value';
+    if (val == 0) return 'Mandatory field';
+    return null;
+  }
+
+  String _validateDistance(String value) {
+    double val = double.tryParse(value);
+    if (val == null || val < 0) {
+      return 'Invalid value';
+    }
+    return null;
+  }
+
+  _save(BuildContext context) async {
+    if (!_formID.currentState.validate()) return false;
+    try {
+      final id = await widget._provider.records.addManual(
+          widget._provider.indicators,
+          _profile.id,
+          _dateTime,
+          _parseDuration(_duration.text),
+          title: textFromCtrl(_title),
+          description: textFromCtrl(_description),
+          distance: double.parse(textFromCtrl(_distance)) * 1000);
+      Navigator.pop(context, id);
+    } catch (e) {
+      print('Error addManual: e');
+    }
   }
 }

@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math';
 
 import 'package:android/data_storage.dart';
+import 'package:android/ui_utils.dart';
 
 abstract class SensorHandler {
   Map<String, double> handleData(Map<String, double> data,
@@ -40,7 +41,14 @@ class TimeSensorHandler extends SensorHandler {
 }
 
 class LocationSensorHandler extends SensorHandler {
-  double _distance(double lat1, lon1, lat2, lon2) {
+  double _distance(Map data1, Map data2) {
+    if (data1.containsKey('distance') && data2.containsKey('distance')) {
+      return (data2['distance'] - data1['distance']).abs();
+    }
+    final lat1 = data1['latitude'];
+    final lat2 = data2['latitude'];
+    final lon1 = data1['longitude'];
+    final lon2 = data2['longitude'];
     final deg2rad = (double deg) => deg * (pi / 180);
     const R = 6371000; // Radius of the earth in m
     final dLat = deg2rad(lat2 - lat1); // deg2rad below
@@ -73,23 +81,19 @@ class LocationSensorHandler extends SensorHandler {
       cache['loc_lap_altitude_delta'] = 0;
     }
     if (last?.status == 0) {
-      distance = _distance(
-          data['latitude'],
-          data['longitude'],
-          last.data['location']['latitude'],
-          last.data['location']['longitude']);
-      altitudeDelta = data['altitude'] - last.data['location']['altitude'];
-      time = data['ts'] - last.data['location']['ts'];
+      final lastData = last.data['location'];
+      distance = _distance(data, lastData);
+      altitudeDelta = (data['altitude'] ?? 0) - (lastData['altitude'] ?? 0);
+      time = (data['ts'] ?? 0) - (lastData['ts'] ?? 0);
     }
     Map lastLoc = data;
     var index = 0;
     trackpoints?.reversed
-        ?.takeWhile((value) => value.status != 1 && index++ < 10)
+        ?.takeWhile((value) => value.status != 1 && index++ < 20)
         ?.forEach((tp) {
       if (tp.status == 0) {
         final loc = tp.data['location'];
-        lastDistance += _distance(lastLoc['latitude'], lastLoc['longitude'],
-            loc['latitude'], loc['longitude']);
+        lastDistance += _distance(lastLoc, loc);
         lastTime += (lastLoc['ts'] - loc['ts']);
         lastLoc = loc;
       }
@@ -125,6 +129,7 @@ class LocationSensorHandler extends SensorHandler {
         _divide(cache['loc_total_time'] / 1000, cache['loc_total_distance']);
     result['loc_lap_pace_sm'] =
         _divide(cache['loc_lap_time'] / 1000, cache['loc_lap_distance']);
+
     result['loc_speed_ms'] = _divide(lastDistance, lastTime / 1000);
     result['loc_pace_sm'] = _divide(lastTime / 1000, lastDistance);
     result['speed_ms'] = result['loc_speed_ms'];
@@ -434,4 +439,21 @@ class SensorIndicatorManager {
   final _connectedHandler = ConnectedSensorHandler();
 
   SensorHandler handler(String id) => _handlers[id] ?? _connectedHandler;
+
+  List<Trackpoint> makeManualTrackpoints(
+      DateTime started, int duration, double distance) {
+    final startTime = started.millisecondsSinceEpoch;
+    final finishTime = startTime + 1000 * duration;
+    final start = Map<String, Map<String, double>>();
+    final finish = Map<String, Map<String, double>>();
+    start['time'] = Map.fromIterables(['now'], [startTime.toDouble()]);
+    finish['time'] = Map.fromIterables(['now'], [finishTime.toDouble()]);
+    if (distance > 0) {
+      start['location'] =
+          Map.fromIterables(['ts', 'distance'], [startTime.toDouble(), 0.0]);
+      finish['location'] = Map.fromIterables(
+          ['ts', 'distance'], [finishTime.toDouble(), distance]);
+    }
+    return [Trackpoint(startTime, 0, start), Trackpoint(finishTime, 0, finish)];
+  }
 }

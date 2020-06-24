@@ -371,6 +371,32 @@ class RecordStorage extends DatabaseStorage {
         '"records"', {'title': record.title, 'description': record.description},
         where: '"id"=?', whereArgs: [record.id]));
   }
+
+  Future<int> addManual(
+      SensorIndicatorManager sensors, int id, DateTime dateTime, int duration,
+      {String title, String description, double distance}) {
+    final trackpoints =
+        sensors.makeManualTrackpoints(dateTime, duration, distance);
+    return openSession((t) async {
+      final added = await t.insert('"records"', {
+        'uid': Uuid().v4(),
+        'profile_id': id,
+        'started': dateTime.millisecondsSinceEpoch,
+        'status': 2,
+        'title': title,
+        'description': description,
+      });
+      await Future.wait(trackpoints.map((e) {
+        return t.insert('"trackpoints"', {
+          'record_id': added,
+          'added': e.timestamp,
+          'status': e.status,
+          'data': jsonEncode(e.data),
+        });
+      }));
+      return added;
+    });
+  }
 }
 
 class ProfileStorage extends DatabaseStorage {
