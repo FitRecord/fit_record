@@ -1,7 +1,18 @@
+import 'dart:math';
+
 import 'package:android/data_sensor.dart';
 import 'package:android/data_storage.dart';
+import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+String formatDurationSeconds(int value, {bool withHour = false}) {
+  int sec = value;
+  int min = (sec / 60).floor();
+  int hour = (min / 60).floor();
+  final hours = hour > 0 || withHour ? '${hour.toString()}:' : '';
+  return '${hours}${(min - hour * 60).toString().padLeft(2, '0')}:${(sec - min * 60).toString().padLeft(2, '0')}';
+}
 
 Widget dotsMenu(BuildContext ctx, Map<String, Function()> data) {
   return PopupMenuButton(
@@ -136,3 +147,201 @@ Widget renderSensor(BuildContext ctx, double textSize,
 }
 
 DateFormat dateTimeFormat() => DateFormat.yMMMd().add_jm();
+
+class ChartSeries {
+  final charts.Series<MapEntry<int, double>, int> series;
+  final charts.NumericAxisSpec axisSpec;
+  final List<charts.RangeAnnotation> behavior;
+
+  ChartSeries(this.series, this.axisSpec, this.behavior);
+}
+
+ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
+    charts.Color color, IndicatorValue indicator,
+    {String renderer,
+    String axisID,
+    int smoothFactor = 300,
+    double average,
+    bool invert = false}) {
+  if (data == null || data.length < 3) return null;
+  final textColor = charts.ColorUtil.fromDartColor(
+      Theme.of(ctx).primaryTextTheme.bodyText1.color);
+
+  final entries = data.entries.toList();
+
+  final smooth = entries.length > smoothFactor
+      ? (entries.length / smoothFactor).ceil()
+      : 0;
+
+  final smoothValue = (int index) {
+    if (smooth == 0) return entries[index].value;
+    final indexes = [
+      for (var i = max(0, index - smooth);
+          i < min(entries.length, index + smooth);
+          i++)
+        entries[i].value
+    ];
+    final sum = indexes.reduce((value, element) => value + element);
+    return sum / indexes.length;
+  };
+
+  List<double> minMaxAvg() {
+    double _min, _max, _avg = 0;
+    List.generate(entries.length, (index) => index).forEach((index) {
+      final val = smoothValue(index);
+      if (_min == null || _min > val) _min = val;
+      if (_max == null || _max < val) _max = val;
+      _avg += val;
+    });
+    return [_min, _max, _avg / data.length];
+  }
+
+  final stat = minMaxAvg();
+  var minus = stat[0];
+  var mul = 1.0;
+  if (stat[0] == stat[1]) {
+    mul = stat[0] == 0 ? 0 : 80 / stat[0];
+    minus = 0;
+  } else {
+    mul = 100 / (stat[1] - stat[0]);
+  }
+  charts.RangeAnnotation averageAnn;
+  if (average != null) {
+    final val = (average - minus) * mul;
+    averageAnn = charts.RangeAnnotation([
+      charts.LineAnnotationSegment(
+          invert ? 100 - val : val, charts.RangeAnnotationAxisType.measure,
+          labelStyleSpec: charts.TextStyleSpec(color: textColor),
+          strokeWidthPx: 1,
+          endLabel: indicator.format(average, null),
+          color: color)
+    ]);
+  }
+  final series = charts.Series<MapEntry<int, double>, int>(
+      id: id,
+      colorFn: (entry, index) => color,
+      domainFn: (entry, index) => entry.key,
+      measureFn: (entry, index) {
+        final val = (smoothValue(index) - minus) * mul;
+        return invert ? 100 - val : val;
+      },
+      data: entries);
+  if (renderer != null) series.setAttribute(charts.rendererIdKey, renderer);
+  if (axisID != null) series.setAttribute(charts.measureAxisIdKey, axisID);
+
+  List<charts.TickSpec<num>> spec;
+  if (stat[0] == stat[1]) {
+    spec = [charts.TickSpec<num>(80, label: indicator.format(stat[0], null))];
+  } else {
+    spec = [0, 25, 50, 75, 100]
+        .map((e) => charts.TickSpec<num>(e,
+            label: indicator.format(
+                (stat[1] - stat[0]) * (invert ? 100 - e : e) / 100 + stat[0],
+                null)))
+        .toList();
+  }
+  final axisSpec = charts.NumericAxisSpec(
+      showAxisLine: false,
+      renderSpec: charts.SmallTickRendererSpec(
+          labelStyle: charts.TextStyleSpec(color: textColor)),
+      tickProviderSpec: charts.StaticNumericTickProviderSpec(spec));
+  return ChartSeries(series, axisSpec, [averageAnn]);
+}
+
+charts.SeriesRendererConfig<num> chartsAltitudeRenderer() =>
+    charts.LineRendererConfig(
+      customRendererId: 'altitude',
+      includeArea: true,
+      stacked: false,
+    );
+
+chartsNoTicksAxis() => charts.NumericAxisSpec(
+    tickProviderSpec: charts.StaticNumericTickProviderSpec([]));
+
+chartsTimeAxis() => charts.NumericAxisSpec(
+    showAxisLine: true,
+    tickFormatterSpec: charts.BasicNumericTickFormatterSpec((val) {
+      print('Format: $val');
+      return val.toString();
+    }),
+    tickProviderSpec: charts.NumericEndPointsTickProviderSpec());
+
+int _secondsStep(int duration) {
+  if (duration < 60) return 20;
+  if (duration < 120) return 30;
+  if (duration < 60 * 5) return 60;
+  if (duration < 60 * 10) return 120;
+  if (duration < 60 * 15) return 60 * 4;
+  if (duration < 60 * 20) return 60 * 5;
+  if (duration < 60 * 30) return 60 * 7;
+  if (duration < 60 * 45) return 60 * 10;
+  if (duration < 60 * 60) return 60 * 15;
+  if (duration < 60 * 90) return 60 * 20;
+  if (duration < 60 * 120) return 60 * 30;
+  if (duration < 60 * 180) return 60 * 45;
+  if (duration < 60 * 240) return 60 * 60;
+  return (duration / 3).floor();
+}
+
+Widget chartsMakeChart(
+    BuildContext ctx, List<ChartSeries> data, charts.AxisSpec primary) {
+  final axis =
+      data.where((element) => element != null).map((e) => e.series).toList();
+  if (axis.isEmpty || axis.last == data.first?.series) {
+    return null;
+  }
+  final annotations = data
+      .where((el) => el?.behavior != null)
+      .fold(<charts.RangeAnnotation>[], (prev, el) {
+    prev.addAll(el.behavior.where((el) => el != null));
+    return prev;
+  });
+  final totalTime = axis.first.data.last.key;
+  final timeStep = _secondsStep(totalTime);
+  final timeTicks = [
+    for (var i = 0; i < totalTime - timeStep; i += timeStep)
+      charts.TickSpec(i, label: formatDurationSeconds(i))
+  ];
+  timeTicks
+      .add(charts.TickSpec(totalTime, label: formatDurationSeconds(totalTime)));
+  final textColor = charts.ColorUtil.fromDartColor(
+      Theme.of(ctx).primaryTextTheme.bodyText1.color);
+  final chart = charts.LineChart(
+    axis,
+    animate: false,
+    defaultInteractions: false,
+    behaviors: annotations,
+    domainAxis: charts.NumericAxisSpec(
+        showAxisLine: false,
+        renderSpec: charts.SmallTickRendererSpec(
+            labelOffsetFromAxisPx: 10,
+            labelStyle: charts.TextStyleSpec(color: textColor)),
+        tickProviderSpec: charts.StaticNumericTickProviderSpec(timeTicks)),
+    customSeriesRenderers: [
+      chartsAltitudeRenderer(),
+    ],
+    primaryMeasureAxis: primary,
+    secondaryMeasureAxis: data.first?.axisSpec,
+  );
+  return SizedBox(
+    child: Card(
+      child: Padding(
+        padding: EdgeInsets.all(4.0),
+        child: chart,
+      ),
+    ),
+    height: 200,
+  );
+}
+
+Column columnMaybe(List<Widget> children) => Column(
+      children: children.where((el) => el != null).toList(),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+    );
+
+String textFromCtrl(TextEditingController ctrl) {
+  final result = ctrl.text?.trim();
+  if (result.isEmpty) return null;
+  return result;
+}

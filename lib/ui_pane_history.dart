@@ -4,7 +4,7 @@ import 'package:android/data_provider.dart';
 import 'package:android/data_storage.dart';
 import 'package:android/ui_main.dart';
 import 'package:android/ui_utils.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
 
 class HistoryPane extends MainPaneState {
@@ -134,6 +134,7 @@ class RecordDetailsPane extends StatefulWidget {
 class _RecordDetailsState extends State<RecordDetailsPane>
     with SingleTickerProviderStateMixin {
   Record _record;
+  Profile _profile;
   final titleEditor = TextEditingController();
   final descritptionEditor = TextEditingController();
   TabController lapTabs;
@@ -144,8 +145,10 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     try {
       final item = await widget.provider.records
           .loadOne(widget.provider.indicators, widget.record.id);
+      final profile = await widget.provider.profiles.one(item.profileID);
       setState(() {
         _record = item;
+        _profile = profile;
         titleEditor.text = item.title ?? '';
         descritptionEditor.text = item.description ?? '';
         lapTabs = TabController(length: _lapsCount(item) + 1, vsync: this);
@@ -186,13 +189,8 @@ class _RecordDetailsState extends State<RecordDetailsPane>
   }
 
   Future _saveForm(BuildContext ctx, Record item) async {
-    final _textFromCtrl = (TextEditingController ctrl) {
-      final result = ctrl.text?.trim();
-      if (result.isEmpty) return null;
-      return result;
-    };
-    item.title = _textFromCtrl(titleEditor);
-    item.description = _textFromCtrl(descritptionEditor);
+    item.title = textFromCtrl(titleEditor);
+    item.description = textFromCtrl(descritptionEditor);
     try {
       await widget.provider.records.updateFields(item);
       Navigator.pop(ctx, true);
@@ -202,27 +200,80 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     }
   }
 
-  Widget _buildOverview(BuildContext ctx, Record item, int endIndex) {
-    final page = [
-      [
-        {'id': endIndex != null ? 'time_lap' : 'time_total'},
-        {'id': endIndex != null ? 'loc_lap_distance' : 'loc_total_distance'},
-      ],
-      [
-        {'id': endIndex != null ? 'loc_lap_speed_ms' : 'loc_total_speed_ms'},
-        {'id': endIndex != null ? 'loc_lap_pace_sm' : 'loc_total_pace_sm'},
-      ]
-    ];
-    return renderSensors(
+  ChartSeries _altitudeSeries(BuildContext ctx, Map<int, double> data) {
+    return chartsMake(
         ctx,
-        widget.provider.indicators,
-        endIndex != null ? item.trackpoints[endIndex] : item.trackpoints.last,
-        page,
-        'Overview:');
+        data,
+        'altitude',
+        charts.MaterialPalette.gray.shadeDefault,
+        widget.provider.indicators.indicators['loc_altitude'],
+        renderer: 'altitude',
+        smoothFactor: 80,
+        axisID: 'secondaryMeasureAxisId');
   }
 
-  Widget _buildHrm(BuildContext ctx, Record item, int endIndex) {
-    final scope = endIndex != null ? 'lap' : 'total';
+  ChartSeries _hrmSeries(BuildContext ctx, Map<int, double> data,
+      {double average}) {
+    return chartsMake(
+      ctx,
+      data,
+      'hrm',
+      charts.MaterialPalette.red.shadeDefault,
+      widget.provider.indicators.indicators['sensor_hrm'],
+      average: average,
+    );
+  }
+
+  ChartSeries _powerSeries(BuildContext ctx, Map<int, double> data,
+      {bool extended = false}) {
+    return chartsMake(
+      ctx,
+      data,
+      'power',
+      charts.MaterialPalette.yellow.shadeDefault,
+      widget.provider.indicators.indicators['sensor_power'],
+    );
+  }
+
+  ChartSeries _paceSpeedSeries(
+      BuildContext ctx, String indicator, Map<int, double> data, bool invert,
+      {double average}) {
+    return chartsMake(
+      ctx,
+      data,
+      'pace/speed',
+      charts.MaterialPalette.blue.shadeDefault,
+      widget.provider.indicators.indicators[indicator],
+      smoothFactor: 120,
+      average: average,
+      invert: invert,
+    );
+  }
+
+  Widget _buildOverview(BuildContext ctx, Record item, int from, int to) {
+    final scope = to != null ? 'lap' : 'total';
+    final page = _profile.defaultScreen(scope, true);
+    final indicator = _profile.speedIndicator();
+    final altitude =
+        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
+    final hrm = _hrmSeries(ctx, item.extractData('sensor_hrm', from, to));
+    final power = _powerSeries(ctx, item.extractData('sensor_power', from, to));
+    final pace = _paceSpeedSeries(
+        ctx, indicator, item.extractData(indicator, from, to), true);
+    final row = to != null ? item.trackpoints[to] : item.trackpoints.last;
+    final sensors =
+        renderSensors(ctx, widget.provider.indicators, row, page, 'Overview:');
+    final axis = [altitude, hrm, power, pace];
+    final chart = chartsMakeChart(ctx, axis, chartsNoTicksAxis());
+    final pace2 = _paceSpeedSeries(ctx, _profile.speedIndicator(),
+        item.extractData(_profile.speedIndicator(), from, to), true,
+        average: row['loc_${scope}_${indicator}']);
+    final paceChart = chartsMakeChart(ctx, [altitude, pace2], pace2?.axisSpec);
+    return columnMaybe([sensors, chart, paceChart]);
+  }
+
+  Widget _buildHrm(BuildContext ctx, Record item, int from, int to) {
+    final scope = to != null ? 'lap' : 'total';
     final page = [
       [
         {'id': 'sensor_hrm_${scope}_avg'},
@@ -232,16 +283,19 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         {'id': 'sensor_hrm_${scope}_max'},
       ]
     ];
-    return renderSensors(
-        ctx,
-        widget.provider.indicators,
-        endIndex != null ? item.trackpoints[endIndex] : item.trackpoints.last,
-        page,
-        'Heart rate:');
+    final row = to != null ? item.trackpoints[to] : item.trackpoints.last;
+    final sensors = renderSensors(
+        ctx, widget.provider.indicators, row, page, 'Heart rate:');
+    final altitude =
+        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
+    final hrm = _hrmSeries(ctx, item.extractData('sensor_hrm', from, to),
+        average: row['sensor_hrm_${scope}_avg']);
+    final chart = chartsMakeChart(ctx, [altitude, hrm], hrm?.axisSpec);
+    return columnMaybe([sensors, chart]);
   }
 
-  Widget _buildPower(BuildContext ctx, Record item, int endIndex) {
-    final scope = endIndex != null ? 'lap' : 'total';
+  Widget _buildPower(BuildContext ctx, Record item, int from, int to) {
+    final scope = to != null ? 'lap' : 'total';
     final page = [
       [
         {'id': 'sensor_power_${scope}_avg'},
@@ -251,31 +305,39 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         {'id': 'sensor_power_${scope}_max'},
       ]
     ];
-    return renderSensors(
+    final altitude =
+        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
+    final power = _powerSeries(ctx, item.extractData('sensor_power', from, to));
+    final chart = chartsMakeChart(ctx, [altitude, power], power?.axisSpec);
+    final sensors = renderSensors(
         ctx,
         widget.provider.indicators,
-        endIndex != null ? item.trackpoints[endIndex] : item.trackpoints.last,
+        to != null ? item.trackpoints[to] : item.trackpoints.last,
         page,
         'Power:');
+    return columnMaybe([sensors, chart]);
   }
 
   Widget _buildTab(BuildContext ctx, int index, Record record) {
     final listItems = <Widget>[];
     int endIndex;
+    int startIndex = 0;
     if (index == null) {
+      startIndex = 0;
       listItems.add(_buildEditForm(context, record));
-      listItems.add(_buildOverview(context, record, null));
+      listItems.add(_buildOverview(context, record, 0, null));
     } else {
       endIndex = index < record.laps.length
           ? record.laps[index]
           : record.trackpoints.length - 1;
-      listItems.add(_buildOverview(context, record, endIndex));
+      startIndex = index > 0 ? record.laps[index - 1] + 1 : 0;
+      listItems.add(_buildOverview(context, record, startIndex, endIndex));
     }
     if (record.trackpoints.last.containsKey('sensor_hrm')) {
-      listItems.add(_buildHrm(ctx, record, endIndex));
+      listItems.add(_buildHrm(ctx, record, startIndex, endIndex));
     }
     if (record.trackpoints.last.containsKey('sensor_power')) {
-      listItems.add(_buildPower(ctx, record, endIndex));
+      listItems.add(_buildPower(ctx, record, startIndex, endIndex));
     }
     return ListView(
       children: listItems,

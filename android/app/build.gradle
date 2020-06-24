@@ -22,7 +22,7 @@ if (flutterVersionName == null) {
 }
 
 def keystorePassword = rootProject.hasProperty('keyPassword')? rootProject.property('keyPassword'): ''
-def ndkVersionNumber = rootProject.hasProperty('ndkVersion')? rootProject.property('ndkVersion'): 'not-set'
+def ndkVersionNumber = rootProject.hasProperty('ndkVersion')? rootProject.property('ndkVersion'): '21.0.0'
 
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'

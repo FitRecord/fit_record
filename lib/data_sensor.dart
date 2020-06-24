@@ -266,10 +266,7 @@ class DurationIndicator extends TimeIndicator {
 
   @override
   String format(double value, Map<String, double> data) {
-    int sec = (value / 1000).round();
-    int min = (sec / 60).floor();
-    int hour = (min / 60).floor();
-    return '${_pad(hour)}:${_pad(min - hour * 60)}:${_pad(sec - min * 60)}';
+    return formatDurationSeconds((value / 1000).round(), withHour: true);
   }
 }
 

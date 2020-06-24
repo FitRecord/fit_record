@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:android/data_provider.dart';
@@ -41,18 +42,49 @@ class Profile {
               .toList())
           .toList();
     } catch (e) {}
-    return [
-      [
+    return [defaultScreen('total', false)];
+  }
+
+  List<List<Map<String, dynamic>>> defaultScreen(String scope, bool overview) {
+    if (overview) {
+      return [
         [
           {
-            'id': 'time_total',
+            'id': 'time_$scope',
           }
         ],
+        [
+          {'id': 'loc_${scope}_distance'},
+          {'id': 'loc_${scope}_${speedIndicator()}'},
+        ],
+      ];
+    }
+    return [
+      [
+        {
+          'id': 'time_${scope}',
+        }
+      ],
+      [
+        {'id': speedIndicator()},
+        {'id': 'loc_${scope}_distance'},
+      ],
+      [
+        {'id': 'loc_${scope}_${speedIndicator()}'},
+        {'id': 'loc_altitude'},
       ]
     ];
   }
 
   Profile(this.id, this.title, this.type, this.icon);
+
+  String speedIndicator() {
+    switch (type) {
+      case 'Running':
+        return 'pace_sm';
+    }
+    return 'speed_ms';
+  }
 }
 
 class Record {
@@ -67,6 +99,20 @@ class Record {
   String smartTitle() {
     return title ??
         dateTimeFormat().format(DateTime.fromMillisecondsSinceEpoch(started));
+  }
+
+  Map<int, double> extractData(String key, int from, int to) {
+    if (trackpoints?.isNotEmpty != true) return null;
+    if (trackpoints.last[key] == null) return null;
+    if (to == null) to = trackpoints.length - 1;
+    if (from > to) return null;
+
+    double start = trackpoints[from]['time_total'];
+    return LinkedHashMap.fromEntries(
+        trackpoints.getRange(from, to + 1).map((e) {
+      return MapEntry<int, double>(
+          ((e['time_total'] - start) / 1000).round(), e[key]);
+    }));
   }
 }
 
@@ -120,12 +166,12 @@ class RecordStorage extends DatabaseStorage {
     }
   }
 
-  Future lap() async {
+  Future<int> lap() async {
     final r = await active();
     if (r != null && r.status == 0) {
       final newTrackpoint = await _addTrackpoint(r, null, Map(), 2);
       trackpoints.add(newTrackpoint);
-      return r;
+      return r.id;
     }
     return null;
   }
@@ -185,8 +231,9 @@ class RecordStorage extends DatabaseStorage {
       });
     }
     print('New sensor data: $args');
-    int ts =
-        args.values.map((e) => e['ts']?.toInt()).firstWhere((el) => el != null);
+    int ts = args.values
+        .map((e) => e['ts']?.toInt())
+        .firstWhere((el) => el != null, orElse: () => null);
     if (ts != null &&
         trackpoints != null &&
         trackpoints.isNotEmpty &&
@@ -197,9 +244,6 @@ class RecordStorage extends DatabaseStorage {
     args.forEach((key, value) {
       final sensorData = (value as Map)
           .map((key, value) => MapEntry<String, double>(key, value));
-      if (sensorData.containsKey("ts")) {
-        ts = sensorData["ts"].toInt();
-      }
       final handlerData =
           sensors.handler(key).handleData(sensorData, trackpoints, cache);
       data.addAll(handlerData);
@@ -332,16 +376,25 @@ class RecordStorage extends DatabaseStorage {
 class ProfileStorage extends DatabaseStorage {
   ProfileStorage() : super(3);
 
+  Profile _toProfile(Map<String, dynamic> e) {
+    final profile = Profile(e['id'], e['title'], e['type'], e['icon']);
+    profile.screens = e['screens'];
+    profile.config = e['config'];
+    return profile;
+  }
+
+  Future<Profile> one(int id) async {
+    final result = (await openSession((t) => t.query('"profiles"',
+        where: '"id"=?',
+        whereArgs: [id]).then((list) => list.map((e) => _toProfile(e)))));
+    if (result.isNotEmpty) return result.first;
+    return null;
+  }
+
   Future<List<Profile>> all() async {
     final result = (await openSession((t) => t
             .query('"profiles" order by "last_used" desc, "title"')
-            .then((list) => list.map((e) {
-                  final profile =
-                      Profile(e['id'], e['title'], e['type'], e['icon']);
-                  profile.screens = e['screens'];
-                  profile.config = e['config'];
-                  return profile;
-                }))))
+            .then((list) => list.map((e) => _toProfile(e)))))
         .toList();
     if (result.isEmpty) {
       final profile = Profile(null, "Running", "Running", "run");
