@@ -15,6 +15,7 @@ jobs:
         run: |
           echo ::set-output name=SOURCE_TAG::${GITHUB_REF#refs/tags/v}
           echo ::set-output name=BUILD_NUMBER::`date +%s`
+          echo ::set-output name=NDK_VERSION::`sdkmanager --list | grep ndk-bundle | gawk 'match($0, /[0-9\.]+/, gr) {print gr[0]}'`
       - name: Set up JDK
         uses: actions/setup-java@v1.3.0
         with:
@@ -26,7 +27,7 @@ jobs:
       - name: Build Android bundle
         env:
           ORG_GRADLE_PROJECT_keyPassword: ${{ secrets.PLAY_STORE_KEY_PASSWORD }}
-          ORG_GRADLE_PROJECT_ndkVersion: '21.3.6528147'
+          ORG_GRADLE_PROJECT_ndkVersion: ${{ steps.set_env.outputs.NDK_VERSION }}
         run: ~/.flutter_dist/bin/flutter build appbundle --build-name=${{ steps.set_env.outputs.SOURCE_TAG }} --build-number=${{ steps.set_env.outputs.BUILD_NUMBER }}
       - name: Create Release
         id: create_release
