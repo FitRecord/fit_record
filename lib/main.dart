@@ -8,6 +8,5 @@ void backgroundMain() {
 }
 
 void main() {
-  DataProvider.initBackground(backgroundMain);
-  runApp(App());
+  runApp(App(backgroundMain));
 }

@@ -93,6 +93,7 @@ class MainActivity : FlutterActivity() {
             "initialize" -> run {
                 recordingService.with {
                     it.callbackID = call.arguments as Long
+                    runOnUiThread { result.success(null) }
                 }
             }
         } }

@@ -103,7 +103,7 @@ class DataProvider {
 
   static backgroundCallback() async {
     WidgetsFlutterBinding.ensureInitialized();
-    final provider = await openProvider();
+    final provider = await _openProvider();
     _backgroundChannel.setMethodCallHandler((call) async {
       print('Incoming background call: ${call.method}');
       switch (call.method) {
@@ -140,16 +140,18 @@ class DataProvider {
   static final _backgroundChannel =
       OptionalMethodChannel('org.fitrecord/background');
 
-  static initBackground(Function() callback) async {
-    WidgetsFlutterBinding.ensureInitialized();
-    return _backgroundChannel.invokeMethod('initialize',
-        PluginUtilities.getCallbackHandle(callback).toRawHandle());
+  static Future<DataProvider> _openProvider() async {
+    final profiles = await openStorage('profiles.db', new ProfileStorage());
+    final records = await openStorage('records.db', new RecordStorage());
+    return new DataProvider(profiles, records, new SensorIndicatorManager(),
+        new RecordingController());
   }
-}
 
-Future<DataProvider> openProvider() async {
-  final profiles = await openStorage('profiles.db', new ProfileStorage());
-  final records = await openStorage('records.db', new RecordStorage());
-  return new DataProvider(profiles, records, new SensorIndicatorManager(),
-      new RecordingController());
+  static Future<DataProvider> openProvider(Function() callback) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    final provider = await _openProvider();
+    _backgroundChannel.invokeMethod('initialize',
+        PluginUtilities.getCallbackHandle(callback).toRawHandle());
+    return provider;
+  }
 }
