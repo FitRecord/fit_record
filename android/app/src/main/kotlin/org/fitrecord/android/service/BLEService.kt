@@ -118,11 +118,13 @@ class BLEService: ConnectableService() {
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 Log.d("BLE", "onServicesDiscovered $status")
                 val disconnect: () -> Unit = {
-                    gatt?.disconnect()
-                    gatt?.close()
+                    try {
+                        gatt?.disconnect()
+                        gatt?.close()
+                    } catch (t: Throwable) {}
                 }
                 when (status) {
-                    BluetoothGatt.GATT_SUCCESS -> {
+                    GATT_SUCCESS -> {
                         Log.d("BLE", "Discovered")
                         val hasService = gatt?.services?.filter {
                             val uuid = it.uuid
@@ -181,11 +183,7 @@ class BLEService: ConnectableService() {
             }
         }
         try {
-            val gatt = getAdapter()?.getRemoteDevice(address)?.connectGatt(this, true, cb)
-            if (gatt == null) {
-                Log.e("BLE", "Failed to connect (create)")
-                callback.onDisconnect(true)
-            }
+            getAdapter()?.getRemoteDevice(address)?.connectGatt(this, true, cb)
         } catch (t: Throwable) {
             Log.e("BLE", "Failed to connect (start)", t)
             callback.onDisconnect(true)

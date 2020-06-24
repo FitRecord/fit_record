@@ -11,8 +11,9 @@ import 'package:flutter/material.dart';
 class _ConfigEditor extends StatefulWidget {
   final Function(Map<String, dynamic> data) _onChanged;
   final DataProvider _provider;
+  final Map<String, dynamic> _data;
 
-  const _ConfigEditor(this._onChanged, this._provider);
+  const _ConfigEditor(this._data, this._onChanged, this._provider);
 
   @override
   State<StatefulWidget> createState() => _ConfigEditorState();
@@ -20,11 +21,21 @@ class _ConfigEditor extends StatefulWidget {
 
 class _ConfigEditorState extends State<_ConfigEditor> {
   final _sensors = <Sensor>[];
+  Map<String, dynamic> _sensorsChecks = Map<String, dynamic>();
 
   @override
   void initState() {
+    _sensorsChecks = widget._data['sensors'] ?? Map<String, dynamic>();
     super.initState();
     _load(context);
+  }
+
+  _checkSensor(BuildContext ctx, String id, bool checked) {
+    setState(() {
+      _sensorsChecks[id] = checked;
+      widget._data['sensors'] = _sensorsChecks;
+      widget._onChanged(widget._data);
+    });
   }
 
   @override
@@ -33,14 +44,17 @@ class _ConfigEditorState extends State<_ConfigEditor> {
     items.add(ListTile(
       title: Text(
         'Sensors:',
-        style: Theme.of(context).textTheme.headline5,
+        style: Theme.of(context).textTheme.headline6,
       ),
       trailing: IconButton(
           icon: Icon(Icons.add), onPressed: () => _addSensor(context)),
     ));
     items.addAll(_sensors.map((item) {
+      final checked = _sensorsChecks[item.id] ?? true;
       return ListTile(
-        leading: Checkbox(value: true, onChanged: null),
+        leading: Checkbox(
+            value: checked,
+            onChanged: (checked) => _checkSensor(context, item.id, checked)),
         title: renderSensorTile(context, item, showAddress: !item.system),
         trailing: !item.system
             ? dotsMenu(
@@ -387,6 +401,7 @@ class ProfilesPane extends MainPaneState {
             widget.provider.indicators);
       case 'config':
         return _ConfigEditor(
+            profile.configJson,
             (json) => _updateJsonField(context, 'config', json),
             widget.provider);
     }

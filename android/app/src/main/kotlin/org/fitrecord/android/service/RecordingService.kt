@@ -23,6 +23,7 @@ import java.util.*
 interface RecordingListener {
     fun onStatusChanged()
     fun onSensorData(data: Map<String, Double>)
+    fun onSensorStatus(data: List<Map<String, Int?>>)
 }
 
 class RecordingService: ConnectableService() {
@@ -81,6 +82,13 @@ class RecordingService: ConnectableService() {
 
     private fun handleBackgroundChannel(call: MethodCall, result: Result) {
         Log.i("Recording", "backgroundChannel call ${call.method}")
+        when (call.method) {
+            "activate" -> {
+                val args = call.arguments as Map<String, Object>
+                activate(args.get("profile_id") as Int)
+                result.success(0)
+            }
+        }
         result.success(null)
     }
 
@@ -149,9 +157,11 @@ class RecordingService: ConnectableService() {
 
                 override fun success(result: Any?) {
                     result?.let {
-                        val data = result as Map<String, Double>
+                        val data = result as Map<String, Any>
                         listeners.invoke {
-                            it.onSensorData(data)
+                            val sensors = data["data"] as Map<String, Double>?
+                            if (sensors != null) it.onSensorData(sensors)
+                            it.onSensorStatus(data["status"] as List<Map<String, Int?>>)
                         }
                         if (!data.containsKey("status")) {
                             idleCount++

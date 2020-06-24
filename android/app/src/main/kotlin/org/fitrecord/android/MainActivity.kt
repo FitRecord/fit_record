@@ -25,7 +25,6 @@ class MainActivity : FlutterActivity() {
 
     private val listener = object: RecordingListener {
         override fun onStatusChanged() {
-            Log.i("Main", "Status changed")
             runOnUiThread { recordingChannel.invokeMethod("statusChanged", null) }
         }
 
@@ -33,6 +32,10 @@ class MainActivity : FlutterActivity() {
             runOnUiThread {
                 recordingChannel.invokeMethod("sensorDataUpdated", data)
             }
+        }
+
+        override fun onSensorStatus(data: List<Map<String, Int?>>) {
+            runOnUiThread { recordingChannel.invokeMethod("sensorStatusUpdated", data) }
         }
 
     }

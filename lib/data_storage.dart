@@ -22,6 +22,15 @@ class Profile {
   int lastUsed;
   String screens, screensExt, zonesHrm, zonesPace, zonesPower, config;
 
+  Map<String, dynamic> get configJson {
+    try {
+      return jsonDecode(config);
+    } catch (e) {
+//      print('JSON decode error: $e');
+    }
+    return Map<String, dynamic>();
+  }
+
   List<List<List<Map<String, dynamic>>>> get screensJson {
     try {
       return (jsonDecode(screens) as List<dynamic>)
@@ -138,6 +147,21 @@ class RecordStorage extends DatabaseStorage {
     trackpoints = null;
     cache.clear();
     return save ? r.id : null;
+  }
+
+  Future<List<Map<String, int>>> sensorStatus(
+      Map args, SensorIndicatorManager sensors) async {
+    return args
+        .map((key, value) =>
+            MapEntry(key, (value as Map).cast<String, double>()))
+        .entries
+        .where((el) => el.value.containsKey('connected'))
+        .map((data) => <String, int>{
+              'type': data.value['type']?.toInt(),
+              'battery': data.value['battery']?.toInt(),
+              'connected': data.value['connected'].toInt(),
+            })
+        .toList();
   }
 
   Future<Map<String, double>> sensorsData(
@@ -406,15 +430,19 @@ class ProfileStorage extends DatabaseStorage {
         where: '"id"=?', whereArgs: [id]));
   }
 
-  Future<Map> profileInfo(int profile) async {
+  Future<Map> profileInfo(int id) async {
     final result = {
       'sensors': [
         {'id': 'time'}
       ]
     };
+    final profile = await one(id);
+    final Map<String, dynamic> sensorsChecks =
+        profile.configJson['sensors'] ?? Map<String, dynamic>();
     final sensors = await allSensors();
     sensors.forEach((sensor) {
-      result['sensors'].add({'id': sensor.id});
+      if (sensorsChecks[sensor.id] != false)
+        result['sensors'].add({'id': sensor.id});
     });
     return result;
   }

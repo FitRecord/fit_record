@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:android/data_storage.dart';
 import 'package:android/ui_main.dart';
 import 'package:android/ui_utils.dart';
@@ -10,6 +12,7 @@ class RecordPane extends MainPaneState {
   List<Profile> _profiles;
   Profile _profile;
   Map<String, double> sensorsData;
+  List<Map<String, int>> sensorsStatus;
 
   _loadProfiles() async {
     try {
@@ -41,6 +44,13 @@ class RecordPane extends MainPaneState {
     }
   }
 
+  _sensorStatusUpdated() {
+    setState(() {
+      sensorsStatus = widget.provider.recording.sensorStatusUpdated.value;
+      print('Sensor status: ${sensorsStatus}');
+    });
+  }
+
   _sensorDataUpdated() {
     setState(() {
       sensorsData = widget.provider.recording.sensorDataUpdated.value
@@ -53,6 +63,8 @@ class RecordPane extends MainPaneState {
     widget.provider.recording.statusNotifier.removeListener(_statusChanged);
     widget.provider.recording.sensorDataUpdated
         .removeListener(_sensorDataUpdated);
+    widget.provider.recording.sensorStatusUpdated
+        .removeListener(_sensorStatusUpdated);
     super.dispose();
   }
 
@@ -60,6 +72,9 @@ class RecordPane extends MainPaneState {
   void initState() {
     super.initState();
     widget.provider.recording.sensorDataUpdated.addListener(_sensorDataUpdated);
+    widget.provider.recording.sensorStatusUpdated
+        .addListener(_sensorStatusUpdated);
+
     widget.provider.recording.statusNotifier.addListener(_statusChanged);
     _loadProfiles();
     _statusChanged();
@@ -142,10 +157,13 @@ class RecordPane extends MainPaneState {
             _profile.screensJson.map((e) => _buildScreen(ctx, e)).toList(),
       );
     }
+    final sensors =
+        sensorsStatus != null ? _buildSensors(ctx, sensorsStatus) : Container();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.max,
       children: [
+        sensors,
         Expanded(child: screens),
         Row(
           children: buttons,
@@ -230,9 +248,85 @@ class RecordPane extends MainPaneState {
     final save = await yesNoDialog(ctx, 'Do you want to save?');
     try {
       print('Finish: $save');
-      await widget.provider.recording.finish(save);
+      final id = await widget.provider.recording.finish(save);
     } catch (e) {
       print('Error _finish: $e');
     }
+  }
+
+  Widget _buildSensors(BuildContext ctx, List<Map<String, int>> sensorsStatus) {
+    final drawBattery = (int level) {
+      var color = Colors.grey.withOpacity(0.5);
+      if (level != null) {
+        if (level > 0) color = Colors.red;
+        if (level > 30) color = Colors.orange;
+        if (level > 60) color = Colors.green;
+      }
+      return CustomPaint(
+        foregroundPainter: _BatteryPaint(level ?? 100, color),
+        size: Size.fromRadius(16.0),
+      );
+    };
+    final makeIcon = (int type) {
+      switch (type) {
+        case 1:
+          return Icons.location_on;
+        case 2:
+          return Icons.favorite;
+        case 3:
+          return Icons.flash_on;
+        case 4:
+          return Icons.directions_run;
+      }
+      return Icons.bluetooth;
+    };
+    final makeColor = (int status) => status == 1 ? Colors.green : Colors.grey;
+    final sorted = sensorsStatus;
+    sorted.sort((a, b) {
+      if (a['connected'] == b['connected'])
+        return (b['type'] ?? 0) - (a['type'] ?? 0);
+      return a['connected'] - b['connected'];
+    });
+    final children = sorted.map<Widget>((e) {
+      final btn = IconButton(
+          icon: Icon(makeIcon(e['type']), color: makeColor(e['connected'])),
+          onPressed: () => null);
+      final battery = e['battery'];
+      return Stack(
+        alignment: Alignment.center,
+        children: [btn, drawBattery(battery)],
+      );
+    });
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: children.toList(),
+    );
+  }
+}
+
+class _BatteryPaint extends CustomPainter {
+  final int _battery;
+  final Color _color;
+  Paint _paint;
+  double _endRad;
+
+  _BatteryPaint(this._battery, this._color) {
+    _paint = Paint()
+      ..color = _color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square
+      ..strokeWidth = 4;
+    _endRad = 2 * pi * _battery / 100;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawArc(Rect.fromLTRB(0, 0, size.width, size.height), -pi / 2,
+        _endRad, false, _paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return true; // TODO
   }
 }

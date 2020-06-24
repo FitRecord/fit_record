@@ -12,6 +12,7 @@ import org.fitrecord.android.service.RecordingService
 class LocationSensor : Sensor() {
 
     private var lastLocation: Location? = null
+    private var connected = false
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location?) {
@@ -25,19 +26,23 @@ class LocationSensor : Sensor() {
         }
 
         override fun onProviderEnabled(provider: String?) {
+            Log.d("Location", "Provider enabled: $provider")
+            connected = true
         }
 
         override fun onProviderDisabled(provider: String?) {
+            Log.d("Location", "Provider disabled: $provider")
+            connected = false
         }
 
     }
 
     override fun latestData(): Map<String, Double>? {
+        val result = hashMapOf("connected" to if (connected) 1.0 else 0.0, "type" to 1.0)
         return lastLocation?.let {
-            val result = hashMapOf(
-                    "ts" to it.time.toDouble(),
-                    "latitude" to it.latitude,
-                    "longitude" to it.longitude)
+            result["ts"] = it.time.toDouble()
+            result["latitude"] = it.latitude
+            result["longitude"] = it.longitude
             if (it.hasAltitude()) {
                 result["altitude"] = it.altitude
             }
@@ -50,7 +55,7 @@ class LocationSensor : Sensor() {
             if (it.hasBearing()) {
                 result["bearing"] = it.bearing.toDouble()
             }
-            result["type"] = when (it.provider) {
+            result["subtype"] = when (it.provider) {
                 LocationManager.GPS_PROVIDER -> 1
                 LocationManager.NETWORK_PROVIDER -> 2
                 LocationManager.PASSIVE_PROVIDER -> 3
@@ -64,9 +69,11 @@ class LocationSensor : Sensor() {
         val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val criteria = Criteria()
         criteria.accuracy = Criteria.ACCURACY_FINE
+        connected = false
         try {
             ctx.mainHandler.postDelayed(fun () {
 //                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0.toFloat(), locationListener, ctx.mainLooper)
+                connected = true
                 lm.requestLocationUpdates(900L, 0.toFloat(), criteria, locationListener, ctx.mainLooper)
             }, 500L);
         } catch (e: SecurityException) {

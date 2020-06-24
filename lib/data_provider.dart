@@ -21,6 +21,7 @@ class RecordingController {
   final newSensorFound = ValueNotifier<Sensor>(null);
   final statusNotifier = ChangeNotifier();
   final sensorDataUpdated = ValueNotifier<Map>(null);
+  final sensorStatusUpdated = ValueNotifier<List<Map<String, int>>>(null);
 
   RecordingController() {
     _recordingChannel.setMethodCallHandler((call) async {
@@ -41,6 +42,13 @@ class RecordingController {
           return;
         case 'sensorDataUpdated':
           sensorDataUpdated.value = call.arguments;
+          return;
+        case 'sensorStatusUpdated':
+          final list = (call.arguments as List)
+              .cast<Map>()
+              .map((e) => e.cast<String, int>())
+              .toList();
+          sensorStatusUpdated.value = list;
           return;
       }
     });
@@ -113,7 +121,13 @@ class DataProvider {
           return provider.records.finish(args['save']);
         case 'sensorsData':
           final args = call.arguments as Map;
-          return provider.records.sensorsData(args, provider.indicators);
+          return () async {
+            final data =
+                await provider.records.sensorsData(args, provider.indicators);
+            final sensors =
+                await provider.records.sensorStatus(args, provider.indicators);
+            return {'data': data, 'status': sensors};
+          }();
       }
     });
   }

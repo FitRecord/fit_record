@@ -11,16 +11,19 @@ class BLESensor(address: String) : Sensor() {
     private val latestData = hashMapOf<String, Double>()
 
     private var disconnectFn: (() -> Unit)? = null
+    private var connected = false
 
     private val deviceCallback = object : ConnectCallback {
         
         override fun onConnect(disconnect: () -> Unit) {
+            connected = true
             Log.d("BLESensor", "Connected $address")
             disconnectFn = disconnect
         }
 
         override fun onDisconnect(failure: Boolean) {
             Log.d("BLESensor", "Disconnect $address: $failure")
+            connected = false
         }
 
         override fun onData(chr: BluetoothGattCharacteristic) {
@@ -32,6 +35,7 @@ class BLESensor(address: String) : Sensor() {
                     data["battery"] = battery.toDouble()
                 }
                 GATT_HRM_CHAR -> {
+                    data["type"] = 2.0
                     val flags = chr.getIntValue(FORMAT_UINT8, 0)
                     val format = if ((flags and 1) != 0) FORMAT_UINT16 else FORMAT_UINT8
                     val value = chr.getIntValue(format, 1)
@@ -39,6 +43,7 @@ class BLESensor(address: String) : Sensor() {
                     data["hrm"] = value.toDouble()
                 }
                 GATT_CYCLING_POWER_CHAR -> {
+                    data["type"] = 3.0
                     val flags = chr.getIntValue(FORMAT_UINT16, 0)
                     val power = chr.getIntValue(FORMAT_SINT16, 2)
                     Log.d("BLESensor", "Power: $flags - $power - ${chr.value.size}")
@@ -85,6 +90,7 @@ class BLESensor(address: String) : Sensor() {
 
     override fun latestData(): Map<String, Double>? {
         synchronized(latestData) {
+            latestData["connected"] = if (connected) 1.0 else 0.0;
             return latestData
         }
     }
@@ -94,6 +100,7 @@ class BLESensor(address: String) : Sensor() {
     }
 
     override fun onDestroy(ctx: RecordingService) {
+        connected = false
         disconnectFn?.let { it() }
         bleService.unbind(ctx)
     }
