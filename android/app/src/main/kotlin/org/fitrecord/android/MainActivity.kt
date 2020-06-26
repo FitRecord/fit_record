@@ -116,13 +116,15 @@ class MainActivity : FlutterActivity() {
             "startSensorScan" -> bleService.with {
                 Log.i("Main", "startSensorScan")
                 it.startScan { id, name ->
-                    it.connectDevice(id, GATT_SUPPORTED_SERVICES, null, object : BLEService.ConnectCallback {
-                        override fun onConnect(disconnect: () -> Unit) {
-                            Log.d("Main", "Connected")
-                            disconnect()
-                            runOnUiThread {
-                                Log.i("Main", "sensorDiscovered $id $name")
-                                recordingChannel.invokeMethod("sensorDiscovered", mapOf("id" to id, "name" to name))
+                    it.connectDevice(id, false, GATT_SUPPORTED_SERVICES, null, object : BLEService.ConnectCallback {
+                        override fun onConnect(connected: Boolean, disconnect: () -> Unit) {
+                            if (connected) {
+                                Log.d("Main", "Connected")
+                                disconnect()
+                                runOnUiThread {
+                                    Log.i("Main", "sensorDiscovered $id $name")
+                                    recordingChannel.invokeMethod("sensorDiscovered", mapOf("id" to id, "name" to name))
+                                }
                             }
                         }
 

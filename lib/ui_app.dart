@@ -1,5 +1,6 @@
 import 'package:android/data_provider.dart';
 import 'package:android/ui_main.dart';
+import 'package:android/ui_utils.dart';
 import 'package:flutter/material.dart';
 
 class App extends StatefulWidget {
@@ -17,7 +18,8 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     DataProvider.openProvider(widget.backgroundMain)
-        .then((value) => setState(() => _provider = value));
+        .then((value) => setState(() => _provider = value))
+        .catchError((err) => showMessage(context, 'Something is not good'));
   }
 
   @override

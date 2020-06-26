@@ -63,12 +63,12 @@ class BLEService: ConnectableService() {
     }
 
     interface ConnectCallback {
-        fun onConnect(disconnect: () -> Unit)
+        fun onConnect(connected: Boolean, disconnect: () -> Unit)
         fun onDisconnect(failure: Boolean)
         fun onData(chr: BluetoothGattCharacteristic)
     }
 
-    fun connectDevice(address: String, services: Array<UUID>, chars: Array<UUID>?, callback: ConnectCallback) {
+    fun connectDevice(address: String, autoConnect: Boolean, services: Array<UUID>, chars: Array<UUID>?, callback: ConnectCallback) {
         val opQueue = LinkedList<() -> Unit>()
         val queueOp = fun(r: (() -> Unit)?) {
             if (r != null) {
@@ -172,7 +172,7 @@ class BLEService: ConnectableService() {
                             }
                             queueOp(null)
                         }
-                        callback.onConnect(disconnect)
+                        callback.onConnect(true, disconnect)
 
                     }
                     else -> {
@@ -183,7 +183,15 @@ class BLEService: ConnectableService() {
             }
         }
         try {
-            getAdapter()?.getRemoteDevice(address)?.connectGatt(this, true, cb)
+            val gatt = getAdapter()?.getRemoteDevice(address)?.connectGatt(this, autoConnect, cb)
+            gatt?.let {
+                callback.onConnect(false) {
+                    try {
+                        gatt?.disconnect()
+                        gatt?.close()
+                    } catch (t: Throwable) {}
+                }
+            }
         } catch (t: Throwable) {
             Log.e("BLE", "Failed to connect (start)", t)
             callback.onDisconnect(true)

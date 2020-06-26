@@ -15,8 +15,8 @@ class BLESensor(address: String) : Sensor() {
 
     private val deviceCallback = object : ConnectCallback {
         
-        override fun onConnect(disconnect: () -> Unit) {
-            connected = true
+        override fun onConnect(isConnected: Boolean, disconnect: () -> Unit) {
+            connected = isConnected
             Log.d("BLESensor", "Connected $address")
             disconnectFn = disconnect
         }
@@ -83,7 +83,7 @@ class BLESensor(address: String) : Sensor() {
 
     private val bleService = object: ConnectableServiceConnection<BLEService>() {
         override fun onConnected(service: BLEService) {
-            service.connectDevice(address, GATT_READ_SERVICES, GATT_READ_CHARS, deviceCallback)
+            service.connectDevice(address, true, GATT_READ_SERVICES, GATT_READ_CHARS, deviceCallback)
         }
 
     }
