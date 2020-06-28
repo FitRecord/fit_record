@@ -19,8 +19,8 @@ class MainActivity : FlutterActivity() {
     private val RECORDING_CHANNEL = "org.fitrecord/recording"
     private lateinit var recordingChannel: MethodChannel
     private lateinit var backgroundChannel: MethodChannel
-    private val recordingService = object: ConnectableServiceConnection<RecordingService>() {
-    }
+    private val recordingService = ConnectableServiceConnection<RecordingService>()
+    private val commService = ConnectableServiceConnection<CommService>()
     private val bleService = ConnectableServiceConnection<BLEService>()
 
     private val listener = object: RecordingListener {
@@ -45,6 +45,7 @@ class MainActivity : FlutterActivity() {
         recordingService.start(this, RecordingService::class.java)
         recordingService.bind(this, RecordingService::class.java)
         bleService.bind(this, BLEService::class.java)
+        commService.bind(this, CommService::class.java)
         checkPermissions()
     }
 
@@ -81,6 +82,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         recordingService.unbind(this)
         bleService.unbind(this)
+        commService.unbind(this)
         super.onDestroy()
     }
 
@@ -159,6 +161,12 @@ class MainActivity : FlutterActivity() {
                 val args = call.arguments as Map<String, *>
                 it.finish(args["save"] as Boolean) {
                     result.success(it)
+                }
+            }
+            "export" -> commService.with { comm ->
+                recordingService.with {
+                    val args = call.arguments as Map<*, *>
+                    comm.export(this, it.backgroundChannel, result, args["id"] as Int, args["type"] as String)
                 }
             }
         }

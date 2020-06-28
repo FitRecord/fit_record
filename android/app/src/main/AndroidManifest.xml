@@ -33,6 +33,14 @@
         </activity>
         <service android:name=".service.RecordingService" android:enabled="true" android:foregroundServiceType="location|connectedDevice"/>
         <service android:name=".service.BLEService" android:enabled="true"/>
+        <service android:name=".service.CommService" android:enabled="true"/>
+        <provider
+            android:exported="false"
+            android:authorities="org.fitrecord.android.export"
+            android:name="androidx.core.content.FileProvider"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/fileprovider"/>
+        </provider>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

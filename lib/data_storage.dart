@@ -397,6 +397,13 @@ class RecordStorage extends DatabaseStorage {
       return added;
     });
   }
+
+  Future<Record> one(int id) async {
+    final list = await openSession((t) => t.query('"records"',
+        where: '"id"=?',
+        whereArgs: [id]).then((list) => list.map((e) => _toRecord(e))));
+    return list.isNotEmpty ? list.first : null;
+  }
 }
 
 class ProfileStorage extends DatabaseStorage {

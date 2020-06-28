@@ -1,10 +1,12 @@
 import 'dart:ui';
 
 import 'package:android/data_db.dart';
+import 'package:android/data_export.dart';
 import 'package:android/data_sensor.dart';
 import 'package:android/data_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
 class Sensor {
   final String id, name;
@@ -91,6 +93,10 @@ class RecordingController {
   Future<bool> activated() async {
     return _recordingChannel.invokeMethod('activated');
   }
+
+  Future<String> export(int id, String type) async {
+    return _recordingChannel.invokeMethod('export', {'id': id, 'type': type});
+  }
 }
 
 class DataProvider {
@@ -98,6 +104,7 @@ class DataProvider {
   final RecordStorage records;
   final SensorIndicatorManager indicators;
   final RecordingController recording;
+  final ExportManager export = ExportManager();
 
   DataProvider(this.profiles, this.records, this.indicators, this.recording);
 
@@ -128,6 +135,9 @@ class DataProvider {
                 await provider.records.sensorStatus(args, provider.indicators);
             return {'data': data, 'status': sensors};
           }();
+        case 'export':
+          final args = call.arguments as Map;
+          return provider.exportOne(args['id'], args['type'], args['dir']);
       }
     });
     final active = await provider.records.active();
@@ -153,5 +163,20 @@ class DataProvider {
     _backgroundChannel.invokeMethod('initialize',
         PluginUtilities.getCallbackHandle(callback).toRawHandle());
     return provider;
+  }
+
+  Future<Map<String, String>> exportOne(int id, String type, String dir) async {
+    final record = await records.one(id);
+    if (record == null) throw ArgumentError('Invalid record');
+    final profile = await profiles.one(record.profileID);
+    if (profile == null) throw ArgumentError('Invalid profile');
+    final trackpoints = await records.loadTrackpoints(record);
+    final exporter = export.exporter(type);
+    if (exporter == null) throw ArgumentError('Invalid export type');
+    final path = p.join(
+        dir, '${record.uid}-${DateTime.now().millisecondsSinceEpoch}.$type');
+    await export.exportToFile(
+        exporter.export(profile, record, trackpoints), path);
+    return {'file': path, 'content_type': exporter.contentType()};
   }
 }

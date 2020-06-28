@@ -17,6 +17,8 @@ dependencies:
   uuid: '^2.0.4'
   intl: '^0.16.1'
   charts_flutter_cf: '^0.10.3+cf'
+  xml: '^4.2.0'
+  path: '^1.7.0'
 
   cupertino_icons: ^0.1.3
 

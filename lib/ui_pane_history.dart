@@ -111,14 +111,27 @@ class HistoryPane extends MainPaneState {
       title: col,
       trailing: dotsMenu(
           ctx,
-          LinkedHashMap.fromIterables(
-              ['Delete'], [() => _deleteRecord(ctx, item)])),
+          LinkedHashMap.fromIterables([
+            'TCX Export',
+            'Delete'
+          ], [
+            () => _exportRecord(ctx, item, 'tcx'),
+            () => _deleteRecord(ctx, item)
+          ])),
     );
   }
 
   Future _openRecord(BuildContext ctx, Record item) async {
     await RecordDetailsPane.open(ctx, widget.provider, item);
     return _load(ctx);
+  }
+
+  _exportRecord(BuildContext ctx, Record record, String type) async {
+    try {
+      await widget.provider.recording.export(record.id, type);
+    } catch (e) {
+      print('Export error: $e');
+    }
   }
 }
 
