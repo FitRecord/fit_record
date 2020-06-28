@@ -2,7 +2,9 @@ package org.fitrecord.android.service
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.PowerManager
@@ -16,6 +18,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.view.FlutterCallbackInformation
 import io.flutter.view.FlutterMain
+import org.fitrecord.android.MainActivity
 import org.fitrecord.android.R
 import org.fitrecord.android.sensor.SensorRegistry
 import java.util.*
@@ -26,22 +29,23 @@ interface RecordingListener {
     fun onSensorStatus(data: List<Map<String, Int?>>)
 }
 
-class RecordingService: ConnectableService() {
+class RecordingService : ConnectableService() {
 
+    private val OPEN_MAIN = 1
     private val IDLE_AUTO_OFF = 60 * 5;
-    internal lateinit var mainHandler: Handler
     val listeners = Listeners<RecordingListener>()
-    
+
     var callbackID: Long? = null
         set(value) {
             field = value
-            value?.let { initFlutter(it) }
+            value?.let { mainHandler.post { initFlutter(it) } }
         }
     private var wl: PowerManager.WakeLock? = null
     private var selectedProfile: Int? = null
     private var idleCount: Int = 0
     private val BACKGROUND_CHANNEL = "org.fitrecord/background"
-    private var backgroundChannel: MethodChannel? = null
+    internal var backgroundChannel: MethodChannel? = null
+
     private var engine: FlutterEngine? = null
     private val FOREGROUND_NOTIFICATION = 1
     private var sensors: SensorRegistry? = null
@@ -54,7 +58,6 @@ class RecordingService: ConnectableService() {
         wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "fitrecord:Recording").also {
             it.setReferenceCounted(false)
         }
-        mainHandler = Handler(mainLooper)
     }
 
     override fun onDestroy() {
@@ -97,7 +100,7 @@ class RecordingService: ConnectableService() {
             val channel = NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT)
             channel.description = description;
             NotificationManagerCompat.from(this).createNotificationChannel(channel);
-        };
+        }
     }
 
     fun activate(profileId: Int) {
@@ -133,11 +136,14 @@ class RecordingService: ConnectableService() {
         }
         selectedProfile = profileId
         ensureNotificationChannel("foreground", "Recording notification", "Recording notification")
+        val activityIntent = Intent(this, MainActivity::class.java)
+        val intent = PendingIntent.getActivity(this, OPEN_MAIN, activityIntent, PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(this, "foreground")
                 .setContentTitle("FitRecord")
                 .setContentText("FitRecord is getting ready")
                 .setOngoing(true)
                 .setDefaults(0)
+                .setContentIntent(intent)
                 .setSmallIcon(R.drawable.ic_notification_record)
                 .build()
         startForeground(FOREGROUND_NOTIFICATION, n)
@@ -146,7 +152,7 @@ class RecordingService: ConnectableService() {
     private fun querySensors() {
 //        Log.i("Recording", "Time to query sensors")
         sensors?.collectData().let {
-            val handler = object: Result {
+            val handler = object : Result {
                 override fun notImplemented() {
                     TODO("Not yet implemented")
                 }
@@ -204,7 +210,7 @@ class RecordingService: ConnectableService() {
     }
 
     fun start(delay: Int) {
-        backgroundChannel?.invokeMethod("start", mapOf("profile_id" to selectedProfile), object: Result {
+        backgroundChannel?.invokeMethod("start", mapOf("profile_id" to selectedProfile), object : Result {
             override fun notImplemented() {
             }
 
@@ -218,9 +224,9 @@ class RecordingService: ConnectableService() {
 
         })
     }
-    
+
     fun pause() {
-        backgroundChannel?.invokeMethod("pause", null, object: Result {
+        backgroundChannel?.invokeMethod("pause", null, object : Result {
             override fun notImplemented() {
             }
 
@@ -236,7 +242,7 @@ class RecordingService: ConnectableService() {
     }
 
     fun lap() {
-        backgroundChannel?.invokeMethod("lap", null, object: Result {
+        backgroundChannel?.invokeMethod("lap", null, object : Result {
             override fun notImplemented() {
             }
 
@@ -252,7 +258,7 @@ class RecordingService: ConnectableService() {
     }
 
     fun finish(save: Boolean, callback: (Int?) -> Unit) {
-        backgroundChannel?.invokeMethod("finish", mapOf("save" to save), object: Result {
+        backgroundChannel?.invokeMethod("finish", mapOf("save" to save), object : Result {
             override fun notImplemented() {
             }
 

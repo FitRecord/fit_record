@@ -44,8 +44,9 @@ Future<T> openStorage<T extends DatabaseStorage>(String dbPath, T storage,
       return File(db.path).delete();
     });
   }
-  var db = await openDatabase(dbPath, version: storage.version,
-      onUpgrade: (db, oldVersion, newVersion) async {
+  var db = await openDatabase(dbPath,
+      singleInstance: false,
+      version: storage.version, onUpgrade: (db, oldVersion, newVersion) async {
     print("Upgrading DB from $oldVersion to $newVersion");
     for (var i = oldVersion; i < newVersion; i++) {
       await storage.migrate(db, i);

@@ -23,7 +23,7 @@ class MainActivity : FlutterActivity() {
     private val commService = ConnectableServiceConnection<CommService>()
     private val bleService = ConnectableServiceConnection<BLEService>()
 
-    private val listener = object: RecordingListener {
+    private val listener = object : RecordingListener {
         override fun onStatusChanged() {
             runOnUiThread { recordingChannel.invokeMethod("statusChanged", null) }
         }
@@ -47,18 +47,6 @@ class MainActivity : FlutterActivity() {
         bleService.bind(this, BLEService::class.java)
         commService.bind(this, CommService::class.java)
         checkPermissions()
-    }
-
-    override fun onStart() {
-        super.onStart()
-        recordingService.async(fun (service: RecordingService, p: Unit?) {
-            service.listeners.add(listener)
-        }).execute(null)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        recordingService.with { it.listeners.remove(listener) }
     }
 
     private fun checkPermissions() {
@@ -91,14 +79,22 @@ class MainActivity : FlutterActivity() {
         recordingChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECORDING_CHANNEL)
         recordingChannel.setMethodCallHandler { call, result -> handleRecording(call, result) }
         backgroundChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKGROUND_CHANNEL)
-        backgroundChannel.setMethodCallHandler { call, result -> when (call.method) {
-            "initialize" -> run {
-                recordingService.with {
-                    it.callbackID = call.arguments as Long
-                    runOnUiThread { result.success(null) }
+        backgroundChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "initialize" -> run {
+                    recordingService.async {
+                        it.callbackID = call.arguments as Long
+                        runOnUiThread { result.success(null) }
+                    }
                 }
             }
-        } }
+        }
+        recordingService.async { it.listeners.add(listener) }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        recordingService.with { it.listeners.remove(listener) }
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private fun handleRecording(call: MethodCall, result: MethodChannel.Result) {
@@ -145,7 +141,7 @@ class MainActivity : FlutterActivity() {
                 it.stopScan()
                 result.success(0)
             }
-            "start" -> recordingService.with { 
+            "start" -> recordingService.with {
                 it.start(0)
                 result.success(0)
             }
@@ -158,7 +154,7 @@ class MainActivity : FlutterActivity() {
                 result.success(0)
             }
             "finish" -> recordingService.with {
-                val args = call.arguments as Map<String, *>
+                val args = call.arguments as Map<*, *>
                 it.finish(args["save"] as Boolean) {
                     result.success(it)
                 }

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.AsyncTask
 import android.os.Binder
+import android.os.Handler
 import android.os.IBinder
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -41,16 +42,18 @@ open class ConnectableServiceConnection<T : ConnectableService>() : ServiceConne
         }
     }
 
-    fun <P, RR> async(lambda: (service: T, param: P?) -> RR): AsyncTask<P, Nothing, RR> {
-        return object : AsyncTask<P, Nothing, RR>() {
-            override fun doInBackground(vararg params: P): RR {
-//                    Log.d("Connectable", "Ready to with ${this.javaClass.simpleName}")
+    fun post(callback: (service: T) -> Unit?) {
+        with { it.mainHandler.post { callback(it) } }
+    }
+
+    fun async(lambda: (service: T) -> Unit?) {
+        object : AsyncTask<Unit?, Nothing, Unit?>() {
+            override fun doInBackground(vararg p: Unit?): Unit? {
                 return with {
-//                        Log.d("Connectable", "Arrived ${this.javaClass.simpleName}")
-                    lambda(it, params[0])
+                    lambda(it)
                 }
             }
-        }
+        }.execute(null)
     }
 
     fun bind(context: Context, cls: Class<T>) {
@@ -84,6 +87,12 @@ abstract class ConnectableService : Service() {
     }
 
     private val localBinder = ConnectableServiceBinder<ConnectableService>()
+    internal lateinit var mainHandler: Handler
+
+    override fun onCreate() {
+        super.onCreate()
+        mainHandler = Handler(mainLooper)
+    }
 
     override fun onBind(intent: Intent?): IBinder? {
         return localBinder
