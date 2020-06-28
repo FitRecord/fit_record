@@ -119,7 +119,7 @@ class Record {
 class RecordStorage extends DatabaseStorage {
   RecordStorage() : super(2);
 
-  final cache = Map<String, double>();
+  Map<String, double> cache;
   List<Trackpoint> trackpoints;
 
   Record _toRecord(Map<String, dynamic> row) {
@@ -135,6 +135,11 @@ class RecordStorage extends DatabaseStorage {
         .query('"records"', where: '"status"!=2')
         .then((list) => list.map((e) => _toRecord(e))));
     return list.isNotEmpty ? list.first : null;
+  }
+
+  void _clear() {
+    cache = null;
+    trackpoints = null;
   }
 
   Future start(int profileID) async {
@@ -156,21 +161,24 @@ class RecordStorage extends DatabaseStorage {
     }
   }
 
-  Future pause() async {
+  Future pause(SensorIndicatorManager sensors) async {
     final r = await active();
     if (r != null && r.status == 0) {
-      final newTrackpoint = await _addTrackpoint(r, null, Map(), 1);
-      trackpoints.add(newTrackpoint);
+      await _addTrackpoint(r, null, Map(), 1);
+      sensors
+          .all()
+          .forEach((element) => element.handlePause(trackpoints, cache));
+      trackpoints.clear();
       return openSession((t) => t.update('"records"', {'status': 1},
           where: '"id"=?', whereArgs: [r.id]));
     }
   }
 
-  Future<int> lap() async {
+  Future<int> lap(SensorIndicatorManager sensors) async {
     final r = await active();
     if (r != null && r.status == 0) {
-      final newTrackpoint = await _addTrackpoint(r, null, Map(), 2);
-      trackpoints.add(newTrackpoint);
+      await _addTrackpoint(r, null, Map(), 2);
+      sensors.all().forEach((element) => element.handleLap(trackpoints, cache));
       return r.id;
     }
     return null;
@@ -190,8 +198,7 @@ class RecordStorage extends DatabaseStorage {
         return t.delete('"records"', where: '"id"=?', whereArgs: [r.id]);
       }
     });
-    trackpoints = null;
-    cache.clear();
+    _clear();
     return save ? r.id : null;
   }
 
@@ -216,21 +223,12 @@ class RecordStorage extends DatabaseStorage {
     final data = Map<String, double>();
     if (record != null) data['status'] = record.status.toDouble();
     if (trackpoints == null && record != null) {
-      final list = await _loadTrackpoints(record);
-      cache.clear();
+      cache = Map<String, double>();
       trackpoints = <Trackpoint>[];
-      list.forEach((element) {
-        if (element.status == 0) {
-          element.data.forEach((key, value) {
-            final sensorData = (value as Map)
-                .map((key, value) => MapEntry<String, double>(key, value));
-            sensors.handler(key).handleData(sensorData, trackpoints, cache);
-          });
-        }
-        trackpoints.add(element);
-      });
+      final list = await loadTrackpoints(record);
+      _processTrackpoints(sensors, list, cache, trackpoints, null, null);
     }
-    print('New sensor data: $args');
+//    print('New sensor data: $args');
     int ts = args.values
         .map((e) => e['ts']?.toInt())
         .firstWhere((el) => el != null, orElse: () => null);
@@ -292,7 +290,7 @@ class RecordStorage extends DatabaseStorage {
     }
   }
 
-  Future<List<Trackpoint>> _loadTrackpoints(Record record) async {
+  Future<List<Trackpoint>> loadTrackpoints(Record record) async {
     return openSession((t) async {
       final list = await t.query('"trackpoints"',
           where: '"record_id"=?', whereArgs: [record.id]);
@@ -335,20 +333,25 @@ class RecordStorage extends DatabaseStorage {
     });
   }
 
-  Future<Record> loadOne(SensorIndicatorManager sensors, int id) async {
-    final list = await openSession((t) => t.query('"records"',
-        where: '"id"=?',
-        whereArgs: [id]).then((list) => list.map((e) => _toRecord(e))));
-    final item = list.isNotEmpty ? list.first : null;
-    if (item == null || item.status != 2) return null;
-    item.trackpoints = <Map<String, double>>[];
-    item.laps = <int>[];
-    final tps = await _loadTrackpoints(item);
-    final cache = Map<String, double>();
-    final trackpoints = <Trackpoint>[];
-    tps.forEach((element) {
+  _processTrackpoints(
+      SensorIndicatorManager sensors,
+      List<Trackpoint> list,
+      Map<String, double> cache,
+      List<Trackpoint> trackpoints,
+      List<int> laps,
+      List<Map<String, double>> results) {
+    list.forEach((element) {
       if (element.status == 2) {
-        item.laps.add(item.trackpoints.length - 1);
+        laps?.add(trackpoints.length - 1);
+        sensors
+            .all()
+            .forEach((element) => element.handleLap(trackpoints, cache));
+      }
+      if (element.status == 1) {
+        sensors
+            .all()
+            .forEach((element) => element.handlePause(trackpoints, cache));
+        trackpoints.clear();
       }
       if (element.status == 0) {
         final data = Map<String, double>();
@@ -359,10 +362,22 @@ class RecordStorage extends DatabaseStorage {
               sensors.handler(key).handleData(sensorData, trackpoints, cache);
           data.addAll(handlerData);
         });
-        item.trackpoints.add(data);
+        results?.add(data);
+        trackpoints.add(element);
       }
-      trackpoints.add(element);
     });
+  }
+
+  Future<Record> loadOne(SensorIndicatorManager sensors, int id) async {
+    final item = await one(id);
+    if (item == null || item.status != 2) return null;
+    item.trackpoints = <Map<String, double>>[];
+    item.laps = <int>[];
+    final tps = await loadTrackpoints(item);
+    final cache = Map<String, double>();
+    final trackpoints = <Trackpoint>[];
+    _processTrackpoints(
+        sensors, tps, cache, trackpoints, item.laps, item.trackpoints);
     return item;
   }
 

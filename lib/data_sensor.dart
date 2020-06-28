@@ -8,6 +8,9 @@ abstract class SensorHandler {
   Map<String, double> handleData(Map<String, double> data,
       List<Trackpoint> trackpoints, Map<String, double> cache);
 
+  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache);
+  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache);
+
   Trackpoint _last(Iterable<Trackpoint> list) =>
       list != null && list.isNotEmpty ? list.last : null;
 
@@ -24,19 +27,28 @@ class TimeSensorHandler extends SensorHandler {
     final result = new Map<String, double>();
     final last = _last(trackpoints);
     double delta = 0;
-    if (last?.status == 2) {
-      cache['time_lap'] = 0;
-      cache['time_lap_index'] = (cache['time_lap_index'] ?? 0) + 1;
-    }
-    if (last?.status == 0) {
+    if (last != null) {
       delta = data['now'] - last.data['time']['now'];
     }
-    cache['time_total'] = (cache['time_total'] ?? 0) + delta;
-    cache['time_lap'] = (cache['time_lap'] ?? 0) + delta;
-    result['time_total'] = cache['time_total'];
-    result['time_lap'] = cache['time_lap'];
-    result['time_lap_index'] = cache['time_lap_index'];
+    if (cache != null) {
+      cache['time_total'] = (cache['time_total'] ?? 0) + delta;
+      cache['time_lap'] = (cache['time_lap'] ?? 0) + delta;
+      result['time_total'] = cache['time_total'];
+      result['time_lap'] = cache['time_lap'];
+      result['time_lap_index'] = cache['time_lap_index'];
+    }
     return result;
+  }
+
+  @override
+  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache) {
+    cache['time_lap'] = 0;
+    cache['time_lap_index'] = (cache['time_lap_index'] ?? 0) + 1;
+  }
+
+  @override
+  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache) {
+    // TODO: implement handlePause
   }
 }
 
@@ -69,34 +81,25 @@ class LocationSensorHandler extends SensorHandler {
     final _incCache =
         (String key, double value) => cache[key] = (cache[key] ?? 0) + value;
     result['loc_altitude'] = data['altitude'];
+    if (cache == null) return result;
     final last = _last(trackpoints);
     double distance = 0,
         altitudeDelta = 0,
         time = 0,
         lastDistance = 0,
         lastTime = 0;
-    if (last?.status == 2) {
-      cache['loc_lap_time'] = 0;
-      cache['loc_lap_distance'] = 0;
-      cache['loc_lap_altitude_delta'] = 0;
-    }
-    if (last?.status == 0) {
+    if (last != null) {
       final lastData = last.data['location'];
       distance = _distance(data, lastData);
       altitudeDelta = (data['altitude'] ?? 0) - (lastData['altitude'] ?? 0);
       time = (data['ts'] ?? 0) - (lastData['ts'] ?? 0);
     }
     Map lastLoc = data;
-    var index = 0;
-    trackpoints?.reversed
-        ?.takeWhile((value) => value.status != 1 && index++ < 20)
-        ?.forEach((tp) {
-      if (tp.status == 0) {
-        final loc = tp.data['location'];
-        lastDistance += _distance(lastLoc, loc);
-        lastTime += (lastLoc['ts'] - loc['ts']);
-        lastLoc = loc;
-      }
+    trackpoints?.reversed?.take(20)?.forEach((tp) {
+      final loc = tp.data['location'];
+      lastDistance += _distance(lastLoc, loc);
+      lastTime += (lastLoc['ts'] - loc['ts']);
+      lastLoc = loc;
     });
     result['last_distance'] = distance;
     _incCache('loc_total_time', time);
@@ -138,6 +141,18 @@ class LocationSensorHandler extends SensorHandler {
 //    print('Location sensor: $data, $result');
     return result;
   }
+
+  @override
+  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache) {
+    cache['loc_lap_time'] = 0;
+    cache['loc_lap_distance'] = 0;
+    cache['loc_lap_altitude_delta'] = 0;
+  }
+
+  @override
+  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache) {
+    // TODO: implement handlePause
+  }
 }
 
 class ConnectedSensorHandler extends SensorHandler {
@@ -162,6 +177,37 @@ class ConnectedSensorHandler extends SensorHandler {
       result['sensor_${key}_${scope}_avg'] = _divide(
           cache['${key}_${scope}_values'], cache['${key}_${scope}_times']);
     };
+    ['hrm', 'power', 'cadence', 'speed_ms', 'stride_len_m', 'distance_m']
+        .forEach((element) {
+      if (data.containsKey(element)) result['sensor_$element'] = data[element];
+    });
+    if (data.containsKey('speed_ms')) {
+      result['speed_ms'] = data['speed_ms'];
+      result['pace_ms'] = 1.0 / data['speed_ms'];
+    }
+    final last = _last(trackpoints);
+    if (last == null) return result;
+    if (data.containsKey('hrm')) {
+      _calcStat('hrm', 'total');
+      _calcStat('hrm', 'lap');
+    }
+    if (data.containsKey('power')) {
+      _calcStat('power', 'total');
+      _calcStat('power', 'lap');
+    }
+    if (data.containsKey('cadence')) {
+      _calcStat('cadence', 'total');
+      _calcStat('cadence', 'lap');
+    }
+    if (data.containsKey('stride_len_m')) {
+      _calcStat('stride_len_m', 'total');
+      _calcStat('stride_len_m', 'lap');
+    }
+    return result;
+  }
+
+  @override
+  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache) {
     final _clearLapCache = (String key) {
       [
         '${key}_lap_times',
@@ -172,51 +218,15 @@ class ConnectedSensorHandler extends SensorHandler {
         cache[key] = 0;
       });
     };
-    final last = _last(trackpoints);
-    if (last?.status == 2) {
-      // Reset cache
-      _clearLapCache('hrm');
-      _clearLapCache('power');
-      _clearLapCache('cadence');
-      _clearLapCache('stride_len_m');
-    }
-    if (data.containsKey('hrm')) {
-      result['sensor_hrm'] = data['hrm'];
-      if (last?.status == 0) {
-        _calcStat('hrm', 'total');
-        _calcStat('hrm', 'lap');
-      }
-    }
-    if (data.containsKey('power')) {
-      result['sensor_power'] = data['power'];
-      if (last?.status == 0) {
-        _calcStat('power', 'total');
-        _calcStat('power', 'lap');
-      }
-    }
-    if (data.containsKey('cadence')) {
-      result['sensor_cadence'] = data['cadence'];
-      if (last?.status == 0) {
-        _calcStat('cadence', 'total');
-        _calcStat('cadence', 'lap');
-      }
-    }
-    if (data.containsKey('speed_ms')) {
-      result['sensor_speed_ms'] = data['speed_ms'];
-      result['speed_ms'] = data['speed_ms'];
-      result['pace_ms'] = 1.0 / data['speed_ms'];
-    }
-    if (data.containsKey('stride_len_m')) {
-      result['sensor_stride_len_m'] = data['stride_len_m'];
-      if (last?.status == 0) {
-        _calcStat('stride_len_m', 'total');
-        _calcStat('stride_len_m', 'lap');
-      }
-    }
-    if (data.containsKey('distance_m')) {
-      result['sensor_distance_m'] = data['distance_m'];
-    }
-    return result;
+    _clearLapCache('hrm');
+    _clearLapCache('power');
+    _clearLapCache('cadence');
+    _clearLapCache('stride_len_m');
+  }
+
+  @override
+  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache) {
+    // TODO: implement handlePause
   }
 }
 
@@ -439,6 +449,8 @@ class SensorIndicatorManager {
   final _connectedHandler = ConnectedSensorHandler();
 
   SensorHandler handler(String id) => _handlers[id] ?? _connectedHandler;
+  Iterable<SensorHandler> all() =>
+      <SensorHandler>[_handlers['time'], _handlers['time'], _connectedHandler];
 
   List<Trackpoint> makeManualTrackpoints(
       DateTime started, int duration, double distance) {

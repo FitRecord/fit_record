@@ -120,9 +120,9 @@ class DataProvider {
           final args = call.arguments as Map;
           return provider.records.start(args['profile_id']);
         case 'pause':
-          return provider.records.pause();
+          return provider.records.pause(provider.indicators);
         case 'lap':
-          return provider.records.lap();
+          return provider.records.lap(provider.indicators);
         case 'finish':
           final args = call.arguments as Map;
           return provider.records.finish(args['save']);
