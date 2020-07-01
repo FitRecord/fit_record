@@ -12,23 +12,25 @@ abstract class Exporter {
 }
 
 class TCXExport extends Exporter {
+  static const String TCD_NS =
+      "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2";
+  static const String TCX_NS =
+      "http://www.garmin.com/xmlschemas/ActivityExtension/v2";
+
   @override
   Stream<String> export(
       Profile profile, Record record, Iterable<Trackpoint> trackpoints) {
     String dt(int msec) =>
         DateTime.fromMillisecondsSinceEpoch(msec).toUtc().toIso8601String();
     streamNode(XmlNode node) => XmlNodeEncoder().convert(<XmlNode>[node]);
-    xmlElement(String name, String value, [List<XmlElement> children]) =>
-        XmlElement(
-            XmlName.fromString(name), const [], children ?? [XmlText(value)]);
+    xmlElement(String name, String value,
+            {List<XmlElement> children, String ns}) =>
+        XmlElement(XmlName(name, ns), const [], children ?? [XmlText(value)]);
+    xmlAttr(String name, String value) =>
+        XmlEventAttribute(name, value, XmlAttributeType.DOUBLE_QUOTE);
     startLap(int msec) => <XmlEvent>[
-          XmlStartElementEvent(
-              "Lap",
-              <XmlEventAttribute>[
-                XmlEventAttribute(
-                    "StartTime", dt(msec), XmlAttributeType.DOUBLE_QUOTE)
-              ],
-              false),
+          XmlStartElementEvent("Lap",
+              <XmlEventAttribute>[xmlAttr("StartTime", dt(msec))], false),
         ]
             .followedBy(streamNode(xmlElement("TotalTimeSeconds", "0")))
             .followedBy(streamNode(xmlElement("DistanceMeters", "0")))
@@ -50,15 +52,11 @@ class TCXExport extends Exporter {
     Stream<List<XmlEvent>> processTrackpoints() async* {
       final start = <XmlEvent>[
         XmlProcessingEvent('xml', 'version="1.0"'),
-        XmlStartElementEvent('TrainingCenterDatabase', const [], false),
+        XmlStartElementEvent('TrainingCenterDatabase',
+            [xmlAttr("xmlns", TCD_NS), xmlAttr("xmlns:tcx", TCX_NS)], false),
         XmlStartElementEvent('Activities', const [], false),
         XmlStartElementEvent(
-            'Activity',
-            [
-              XmlEventAttribute(
-                  'Sport', profile.type, XmlAttributeType.DOUBLE_QUOTE)
-            ],
-            false),
+            'Activity', [xmlAttr('Sport', profile.type)], false),
       ];
       // <XML><TCD><Acts><Act>
       yield start;
@@ -73,7 +71,7 @@ class TCXExport extends Exporter {
             final lat = dataValue(tp.data, 'location', 'latitude');
             final lon = dataValue(tp.data, 'location', 'longitude');
             if (lat != null && lon != null) {
-              items.add(xmlElement("Position", "", [
+              items.add(xmlElement("Position", "", children: [
                 xmlElement("LatitudeDegrees", lat.toString()),
                 xmlElement("LongitudeDegrees", lon.toString()),
               ]));
@@ -86,18 +84,19 @@ class TCXExport extends Exporter {
               items.add(xmlElement("DistanceMeters", distance.toString()));
             final hrm = dataValue(tp.data, null, 'hrm');
             if (hrm != null)
-              items.add(xmlElement(
-                  'HeartRateBpm', '', [xmlElement('Value', hrm.toString())]));
+              items.add(xmlElement('HeartRateBpm', '',
+                  children: [xmlElement('Value', hrm.toString())]));
             final cadence = dataValue(tp.data, null, 'cadence');
             if (cadence != null)
-              items.add(xmlElement(
-                  'Cadence', '', [xmlElement('Value', cadence.toString())]));
+              items.add(xmlElement('Cadence', '',
+                  children: [xmlElement('Value', cadence.toString())]));
             final power = dataValue(tp.data, null, 'power');
-            if (power != null) ext.add(xmlElement('Watts', power.toString()));
+            if (power != null)
+              ext.add(xmlElement('Watts', power.toString(), ns: "tcx"));
             if (ext.isNotEmpty)
-              items.add(
-                  xmlElement('Extensions', '', [xmlElement('TPX', '', ext)]));
-            yield streamNode(xmlElement('Trackpoint', '', items));
+              items.add(xmlElement('Extensions', '',
+                  children: [xmlElement('TPX', '', children: ext, ns: "tcx")]));
+            yield streamNode(xmlElement('Trackpoint', '', children: items));
             break;
           case 1: // Pause
             if (tp != trackpoints.last) {
