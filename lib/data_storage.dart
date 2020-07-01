@@ -117,7 +117,7 @@ class Record {
 }
 
 class RecordStorage extends DatabaseStorage {
-  RecordStorage() : super(2);
+  RecordStorage([ChannelDbDelegate delegate]) : super(2, delegate);
 
   Map<String, double> cache;
   List<Trackpoint> trackpoints;
@@ -422,7 +422,7 @@ class RecordStorage extends DatabaseStorage {
 }
 
 class ProfileStorage extends DatabaseStorage {
-  ProfileStorage() : super(3);
+  ProfileStorage([ChannelDbDelegate delegate]) : super(3, delegate);
 
   Profile _toProfile(Map<String, dynamic> e) {
     final profile = Profile(e['id'], e['title'], e['type'], e['icon']);

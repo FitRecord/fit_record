@@ -35,11 +35,6 @@ class RecordingService : ConnectableService() {
     private val IDLE_AUTO_OFF = 60 * 5;
     val listeners = Listeners<RecordingListener>()
 
-    var callbackID: Long? = null
-        set(value) {
-            field = value
-            value?.let { mainHandler.post { initFlutter(it) } }
-        }
     private var wl: PowerManager.WakeLock? = null
     private var selectedProfile: Int? = null
     private var idleCount: Int = 0
@@ -70,16 +65,23 @@ class RecordingService : ConnectableService() {
         super.onDestroy()
     }
 
-    private fun initFlutter(callbackID: Long) {
-        if (engine == null) {
-            engine = FlutterEngine(this).apply {
-                val callbackInfo = FlutterCallbackInformation.lookupCallbackInformation(callbackID)
-                Log.d("Recording", "Callback: ${callbackInfo.callbackClassName}, ${callbackInfo.callbackName}")
-                dartExecutor.executeDartCallback(DartExecutor.DartCallback(assets, FlutterMain.findAppBundlePath(), callbackInfo))
-                backgroundChannel = MethodChannel(dartExecutor.binaryMessenger, BACKGROUND_CHANNEL).apply {
-                    setMethodCallHandler { call, result -> handleBackgroundChannel(call, result) }
+    internal fun initFlutter(callbackID: Long, callback: (engine: FlutterEngine) -> Unit) {
+        mainHandler.post {
+            if (engine == null) {
+                engine = FlutterEngine(this).apply {
+                    val callbackInfo = FlutterCallbackInformation.lookupCallbackInformation(callbackID)
+                    Log.d("Recording", "Callback: ${callbackInfo.callbackClassName}, ${callbackInfo.callbackName}")
+                    dartExecutor.executeDartCallback(DartExecutor.DartCallback(assets, FlutterMain.findAppBundlePath(), callbackInfo))
+                    backgroundChannel = MethodChannel(dartExecutor.binaryMessenger, BACKGROUND_CHANNEL).apply {
+                        setMethodCallHandler { call, result ->
+                            when (call.method) {
+                                "initialized" -> callback(engine!!)
+                                else -> handleBackgroundChannel(call, result)
+                            }
+                        }
+                    }
                 }
-            }
+            } else callback(engine!!)
         }
     }
 
@@ -87,7 +89,7 @@ class RecordingService : ConnectableService() {
         Log.i("Recording", "backgroundChannel call ${call.method}")
         when (call.method) {
             "activate" -> {
-                val args = call.arguments as Map<String, Object>
+                val args = call.arguments as Map<String, Any>
                 activate(args.get("profile_id") as Int)
                 result.success(0)
             }

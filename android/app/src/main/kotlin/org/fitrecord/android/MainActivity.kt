@@ -17,8 +17,11 @@ class MainActivity : FlutterActivity() {
     private val REQUEST_PERMISSIONS = 1
     private val BACKGROUND_CHANNEL = "org.fitrecord/background"
     private val RECORDING_CHANNEL = "org.fitrecord/recording"
+    private val PROXY_CHANNEL = "org.fitrecord/proxy"
     private lateinit var recordingChannel: MethodChannel
     private lateinit var backgroundChannel: MethodChannel
+    private lateinit var profilesProxy: ChannelEngineProxy
+    private lateinit var recordsProxy: ChannelEngineProxy
     private val recordingService = ConnectableServiceConnection<RecordingService>()
     private val commService = ConnectableServiceConnection<CommService>()
     private val bleService = ConnectableServiceConnection<BLEService>()
@@ -83,8 +86,11 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "initialize" -> run {
                     recordingService.async {
-                        it.callbackID = call.arguments as Long
-                        runOnUiThread { result.success(null) }
+                        it.initFlutter(call.arguments as Long) {
+                            profilesProxy = ChannelEngineProxy(flutterEngine.dartExecutor, it.dartExecutor, "$PROXY_CHANNEL/profiles")
+                            recordsProxy = ChannelEngineProxy(flutterEngine.dartExecutor, it.dartExecutor, "$PROXY_CHANNEL/records")
+                            runOnUiThread { result.success(null) }
+                        }
                     }
                 }
             }

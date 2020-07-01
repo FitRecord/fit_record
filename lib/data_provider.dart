@@ -106,11 +106,15 @@ class DataProvider {
   final RecordingController recording;
   final ExportManager export = ExportManager();
 
-  DataProvider(this.profiles, this.records, this.indicators, this.recording);
+  final DbWrapperChannel profilesWrapper;
+  final DbWrapperChannel recordsWrapper;
+
+  DataProvider(this.profiles, this.records, this.indicators, this.recording,
+      [this.profilesWrapper, this.recordsWrapper]);
 
   static backgroundCallback() async {
     WidgetsFlutterBinding.ensureInitialized();
-    final provider = await _openProvider();
+    final provider = await _openBackgroundProvider();
     _backgroundChannel.setMethodCallHandler((call) async {
       print('Incoming background call: ${call.method}');
       switch (call.method) {
@@ -140,6 +144,7 @@ class DataProvider {
           return provider.exportOne(args['id'], args['type'], args['dir']);
       }
     });
+    await _backgroundChannel.invokeMethod('initialized');
     final active = await provider.records.active();
     if (active != null) {
       await _backgroundChannel.invokeMethod(
@@ -150,18 +155,31 @@ class DataProvider {
   static final _backgroundChannel =
       OptionalMethodChannel('org.fitrecord/background');
 
-  static Future<DataProvider> _openProvider() async {
+  static Future<DataProvider> _openBackgroundProvider() async {
     final profiles = await openStorage('profiles.db', new ProfileStorage());
     final records = await openStorage('records.db', new RecordStorage());
+    final profilesWrapper =
+        DbWrapperChannel('org.fitrecord/proxy/profiles', profiles);
+    final recordsWrapper =
+        DbWrapperChannel('org.fitrecord/proxy/records', records);
+    return new DataProvider(profiles, records, new SensorIndicatorManager(),
+        new RecordingController(), profilesWrapper, recordsWrapper);
+  }
+
+  static Future<DataProvider> _openUiProvider() async {
+    final profilesWrapper = ChannelDbDelegate('org.fitrecord/proxy/profiles');
+    final recordsWrapper = ChannelDbDelegate('org.fitrecord/proxy/records');
+    final profiles = new ProfileStorage(profilesWrapper);
+    final records = new RecordStorage(recordsWrapper);
     return new DataProvider(profiles, records, new SensorIndicatorManager(),
         new RecordingController());
   }
 
   static Future<DataProvider> openProvider(Function() callback) async {
     WidgetsFlutterBinding.ensureInitialized();
-    final provider = await _openProvider();
-    _backgroundChannel.invokeMethod('initialize',
+    await _backgroundChannel.invokeMethod('initialize',
         PluginUtilities.getCallbackHandle(callback).toRawHandle());
+    final provider = await _openUiProvider();
     return provider;
   }
 
