@@ -70,16 +70,18 @@ class RecordingService : ConnectableService() {
             if (engine == null) {
                 engine = FlutterEngine(this).apply {
                     val callbackInfo = FlutterCallbackInformation.lookupCallbackInformation(callbackID)
-                    Log.d("Recording", "Callback: ${callbackInfo.callbackClassName}, ${callbackInfo.callbackName}")
-                    dartExecutor.executeDartCallback(DartExecutor.DartCallback(assets, FlutterMain.findAppBundlePath(), callbackInfo))
                     backgroundChannel = MethodChannel(dartExecutor.binaryMessenger, BACKGROUND_CHANNEL).apply {
                         setMethodCallHandler { call, result ->
                             when (call.method) {
-                                "initialized" -> callback(engine!!)
+                                "initialized" -> {
+                                    callback(engine!!)
+                                    result.success(null)
+                                }
                                 else -> handleBackgroundChannel(call, result)
                             }
                         }
                     }
+                    dartExecutor.executeDartCallback(DartExecutor.DartCallback(assets, FlutterMain.findAppBundlePath(), callbackInfo))
                 }
             } else callback(engine!!)
         }
@@ -93,8 +95,8 @@ class RecordingService : ConnectableService() {
                 activate(args.get("profile_id") as Int)
                 result.success(0)
             }
+            else -> result.notImplemented()
         }
-        result.success(null)
     }
 
     private fun ensureNotificationChannel(id: String, name: String, description: String) {

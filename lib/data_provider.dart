@@ -147,8 +147,8 @@ class DataProvider {
     await _backgroundChannel.invokeMethod('initialized');
     final active = await provider.records.active();
     if (active != null) {
-      await _backgroundChannel.invokeMethod(
-          'activate', <String, dynamic>{'profile_id': active.profileID});
+      await _backgroundChannel
+          .invokeMethod('activate', {'profile_id': active.profileID});
     }
   }
 
