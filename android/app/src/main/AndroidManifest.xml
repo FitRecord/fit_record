@@ -44,5 +44,9 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <receiver
+            android:name=".service.ActionReceiver"
+            android:exported="false"
+            android:enabled="true"/>
     </application>
 </manifest>

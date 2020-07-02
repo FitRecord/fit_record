@@ -5,10 +5,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.os.AsyncTask
 import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
+import android.util.Log
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -61,8 +63,9 @@ open class ConnectableServiceConnection<T : ConnectableService>() : ServiceConne
         context.bindService(intent, this, Context.BIND_AUTO_CREATE)
     }
 
-    fun start(context: Context, cls: Class<T>) {
+    fun start(context: Context, cls: Class<T>, callback: ((intent: Intent) -> Unit?)? = null) {
         val intent = Intent(context, cls)
+        callback?.let { it(intent) }
         context.startService(intent)
     }
 
@@ -96,6 +99,16 @@ abstract class ConnectableService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? {
         return localBinder
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val result = super.onStartCommand(intent, flags, startId)
+        onIntent(intent!!, intent?.data)
+        return result
+    }
+    
+    open fun onIntent(intent: Intent, uri: Uri?) {
+        
     }
 
 }

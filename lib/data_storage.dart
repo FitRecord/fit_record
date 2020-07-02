@@ -229,16 +229,12 @@ class RecordStorage extends DatabaseStorage {
       _processTrackpoints(sensors, list, cache, trackpoints, null, null);
     }
 //    print('New sensor data: $args');
-    int ts = args.values
+    final ts = args.values
         .map((e) => e['ts']?.toInt())
         .firstWhere((el) => el != null, orElse: () => null);
-    if (ts != null &&
-        trackpoints != null &&
-        trackpoints.isNotEmpty &&
-        trackpoints.last.timestamp >= ts) {
-      // Skip saving - timestamp is the same as before
-      return null;
-    }
+    final dataUpdated = ts == null ||
+        trackpoints?.isEmpty != false ||
+        trackpoints.last.timestamp < ts;
     args.forEach((key, value) {
       final sensorData = (value as Map)
           .map((key, value) => MapEntry<String, double>(key, value));
@@ -246,7 +242,7 @@ class RecordStorage extends DatabaseStorage {
           sensors.handler(key).handleData(sensorData, trackpoints, cache);
       data.addAll(handlerData);
     });
-    if (record != null && record.status == 0) {
+    if (record?.status == 0 && dataUpdated) {
       // recording is active
       final newTrackpoint = await _addTrackpoint(record, ts, args, 0);
       trackpoints.add(newTrackpoint);

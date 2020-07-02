@@ -1,15 +1,18 @@
 package org.fitrecord.android.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationCompat.Builder
 import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
@@ -21,6 +24,7 @@ import io.flutter.view.FlutterMain
 import org.fitrecord.android.MainActivity
 import org.fitrecord.android.R
 import org.fitrecord.android.sensor.SensorRegistry
+import org.fitrecord.android.service.ActionType.*
 import java.util.*
 
 interface RecordingListener {
@@ -139,18 +143,47 @@ class RecordingService : ConnectableService() {
             backgroundChannel?.invokeMethod("profileInfo", profileId, handler)
         }
         selectedProfile = profileId
+        val n = updateWithStatus(null, null)
+        startForeground(FOREGROUND_NOTIFICATION, n)
+    }
+
+    private fun updateWithStatus(status: Int?, text: String?): Notification {
+        val text = text ?: "FitRecord is ready"
+        when (status) {
+            0 -> {
+                return updateNotification("Recording", text, R.drawable.ic_notification_record) {
+                    addNotificationAction(this, it, Pause, "Pause")
+                }
+            }
+            1 -> {
+                return updateNotification("Paused", text, R.drawable.ic_notification_pause) {
+                    addNotificationAction(this, it, Record, "Resume")
+                }
+            }
+        }
+        return updateNotification("Ready", text, R.drawable.ic_notification_ready) {
+            addNotificationAction(this, it, Record, "Start")
+            addNotificationAction(this, it, Cancel, "Cancel")
+        }
+    }
+
+    private fun updateNotification(title: String, text: String, icon: Int, callback: (Builder) -> Builder): Notification {
         ensureNotificationChannel("foreground", "Recording notification", "Recording notification")
         val activityIntent = Intent(this, MainActivity::class.java)
         val intent = PendingIntent.getActivity(this, OPEN_MAIN, activityIntent, PendingIntent.FLAG_UPDATE_CURRENT)
-        val n = NotificationCompat.Builder(this, "foreground")
-                .setContentTitle("FitRecord")
-                .setContentText("FitRecord is getting ready")
+        val builder = Builder(this, "foreground")
+                .setContentTitle(title)
+                .setContentText(text)
                 .setOngoing(true)
                 .setDefaults(0)
                 .setContentIntent(intent)
-                .setSmallIcon(R.drawable.ic_notification_record)
-                .build()
-        startForeground(FOREGROUND_NOTIFICATION, n)
+                .setSmallIcon(icon)
+                .setOnlyAlertOnce(true)
+        val n = callback(builder).build()
+        NotificationManagerCompat.from(this).apply {
+            notify(FOREGROUND_NOTIFICATION, n)
+        }
+        return n
     }
 
     private fun querySensors() {
@@ -158,7 +191,6 @@ class RecordingService : ConnectableService() {
         sensors?.collectData().let {
             val handler = object : Result {
                 override fun notImplemented() {
-                    TODO("Not yet implemented")
                 }
 
                 override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
@@ -170,15 +202,19 @@ class RecordingService : ConnectableService() {
                         val data = result as Map<String, Any>
                         listeners.invoke {
                             val sensors = data["data"] as Map<String, Double>?
-                            if (sensors != null) it.onSensorData(sensors)
+                            sensors?.let { sensors ->
+                                it.onSensorData(sensors)
+                                val status = (sensors["status"] as Double?)?.toInt()
+                                if (status == null) {
+                                    idleCount++
+                                    if (idleCount >= IDLE_AUTO_OFF) {
+                                        deactivate()
+                                    }
+                                } else idleCount = 0
+                                updateWithStatus(status, data["status_text"] as String?)
+                            }
                             it.onSensorStatus(data["status"] as List<Map<String, Int?>>)
                         }
-                        if (!data.containsKey("status")) {
-                            idleCount++
-                            if (idleCount >= IDLE_AUTO_OFF) {
-                                deactivate()
-                            }
-                        } else idleCount = 0
                     }
                 }
 
@@ -192,15 +228,15 @@ class RecordingService : ConnectableService() {
     fun deactivate() {
         stopForeground(true)
         synchronized(BACKGROUND_CHANNEL) {
+            sensorTimer?.let {
+                it.cancel()
+                sensorTimer = null
+            }
             sensors?.let {
                 it.destroy(this)
                 sensors = null
             }
             wl?.release()
-            sensorTimer?.let {
-                it.cancel()
-                sensorTimer = null
-            }
             listeners.invoke {
                 it.onStatusChanged()
             }
@@ -276,6 +312,18 @@ class RecordingService : ConnectableService() {
             }
 
         })
+    }
+
+    override fun onIntent(intent: Intent, uri: Uri?) {
+        parseActionType(uri)?.let { action ->
+            Log.d("Recording", "Action: $action")
+            when (action) {
+                Record -> start(0)
+                Pause -> pause()
+                Lap -> lap()
+                Cancel -> deactivate()
+            }
+        }
     }
 
 }
