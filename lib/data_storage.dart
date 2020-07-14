@@ -85,6 +85,13 @@ class Profile {
     }
     return 'speed_ms';
   }
+
+  String makeStatusText(
+      SensorIndicatorManager sensors, Map<String, double> data) {
+    final time = sensors.formatFor('time_total', data);
+    final distance = sensors.formatFor('loc_total_distance', data);
+    return 'Time: $time, distance: $distance';
+  }
 }
 
 class Record {
@@ -114,6 +121,13 @@ class Record {
           ((e['time_total'] - start) / 1000).round(), e[key]);
     }));
   }
+}
+
+class SensorsDataResult {
+  final Map<String, double> data;
+  final String status;
+
+  SensorsDataResult(this.data, this.status);
 }
 
 class RecordStorage extends DatabaseStorage {
@@ -217,8 +231,8 @@ class RecordStorage extends DatabaseStorage {
         .toList();
   }
 
-  Future<Map<String, double>> sensorsData(
-      Map args, SensorIndicatorManager sensors) async {
+  Future<SensorsDataResult> sensorsData(
+      Map args, SensorIndicatorManager sensors, ProfileStorage profiles) async {
     final record = await active();
     final data = Map<String, double>();
     if (record != null) data['status'] = record.status.toDouble();
@@ -232,22 +246,29 @@ class RecordStorage extends DatabaseStorage {
     final ts = args.values
         .map((e) => e['ts']?.toInt())
         .firstWhere((el) => el != null, orElse: () => null);
-    final dataUpdated = ts == null ||
-        trackpoints?.isEmpty != false ||
-        trackpoints.last.timestamp < ts;
+    final dataUpdated = (ts == null ||
+            trackpoints?.isEmpty != false ||
+            trackpoints.last.timestamp < ts) &&
+        record?.status == 0;
     args.forEach((key, value) {
       final sensorData = (value as Map)
           .map((key, value) => MapEntry<String, double>(key, value));
-      final handlerData =
-          sensors.handler(key).handleData(sensorData, trackpoints, cache);
+      final handlerData = sensors
+          .handler(key)
+          .handleData(sensorData, dataUpdated ? trackpoints : null, cache);
       data.addAll(handlerData);
     });
-    if (record?.status == 0 && dataUpdated) {
+    if (dataUpdated) {
       // recording is active
       final newTrackpoint = await _addTrackpoint(record, ts, args, 0);
       trackpoints.add(newTrackpoint);
     }
-    return data;
+    String statusText;
+    if (record != null) {
+      final profile = await profiles.one(record.profileID);
+      if (profile != null) statusText = profile.makeStatusText(sensors, data);
+    }
+    return SensorsDataResult(data, statusText);
   }
 
   @override

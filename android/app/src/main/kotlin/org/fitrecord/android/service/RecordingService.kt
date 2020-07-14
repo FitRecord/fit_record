@@ -117,17 +117,8 @@ class RecordingService : ConnectableService() {
             idleCount = 0
             wl?.acquire()
             sensors = SensorRegistry()
-            val handler = object : Result {
-                override fun notImplemented() {
-                    Log.e("Recording", "No profileInfo")
-                }
-
-                override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
-                    Log.e("Recording", "Error: $errorCode, $errorMessage")
-                }
-
-                override fun success(result: Any?) {
-                    val args = result as Map<String, Any>
+            backgroundChannel?.invokeMethod("profileInfo", profileId, makeSimpleResult<Map<String, Any>>("profileInfo") {
+                it?.let { args: Map<String, Any> ->
                     sensors?.init(this@RecordingService, args["sensors"] as List<Map<String, Any>>)
                     sensorTimer = Timer("Sensor").also {
                         it.scheduleAtFixedRate(object : TimerTask() {
@@ -137,10 +128,9 @@ class RecordingService : ConnectableService() {
                             }
                         }, 1000L, 1000L)
                     }
+                    Unit
                 }
-
-            }
-            backgroundChannel?.invokeMethod("profileInfo", profileId, handler)
+            })
         }
         selectedProfile = profileId
         val n = updateWithStatus(null, null)
@@ -187,19 +177,10 @@ class RecordingService : ConnectableService() {
     }
 
     private fun querySensors() {
-//        Log.i("Recording", "Time to query sensors")
         sensors?.collectData().let {
-            val handler = object : Result {
-                override fun notImplemented() {
-                }
-
-                override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
-                    Log.e("Recording", "sensorsData $errorCode, $errorMessage, $errorDetails")
-                }
-
-                override fun success(result: Any?) {
-                    result?.let {
-                        val data = result as Map<String, Any>
+            mainHandler.post {
+                backgroundChannel?.invokeMethod("sensorsData", it, makeSimpleResult<Map<String, Any>>("sensorsData") {
+                    it?.let { data: Map<String, Any> ->
                         listeners.invoke {
                             val sensors = data["data"] as Map<String, Double>?
                             sensors?.let { sensors ->
@@ -216,11 +197,8 @@ class RecordingService : ConnectableService() {
                             it.onSensorStatus(data["status"] as List<Map<String, Int?>>)
                         }
                     }
-                }
 
-            }
-            mainHandler.post {
-                backgroundChannel?.invokeMethod("sensorsData", it, handler)
+                })
             }
         }
     }
@@ -250,67 +228,31 @@ class RecordingService : ConnectableService() {
     }
 
     fun start(delay: Int) {
-        backgroundChannel?.invokeMethod("start", mapOf("profile_id" to selectedProfile), object : Result {
-            override fun notImplemented() {
-            }
-
-            override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
-                Log.e("Recording", "Not started: $errorCode, $errorMessage")
-            }
-
-            override fun success(result: Any?) {
-                listeners.invoke { it.onStatusChanged() }
-            }
-
+        backgroundChannel?.invokeMethod("start", mapOf("profile_id" to selectedProfile), makeSimpleResult<Any>("start") {
+            listeners.invoke { it.onStatusChanged() }
+            querySensors()
         })
     }
 
     fun pause() {
-        backgroundChannel?.invokeMethod("pause", null, object : Result {
-            override fun notImplemented() {
-            }
-
-            override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
-                Log.e("Recording", "Not paused: $errorCode, $errorMessage")
-            }
-
-            override fun success(result: Any?) {
-                listeners.invoke { it.onStatusChanged() }
-            }
-
+        backgroundChannel?.invokeMethod("pause", null, makeSimpleResult<Any>("pause") {
+            listeners.invoke { it.onStatusChanged() }
+            querySensors()
         })
     }
 
     fun lap() {
-        backgroundChannel?.invokeMethod("lap", null, object : Result {
-            override fun notImplemented() {
-            }
-
-            override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
-                Log.e("Recording", "Lap error: $errorCode, $errorMessage")
-            }
-
-            override fun success(result: Any?) {
-                listeners.invoke { it.onStatusChanged() }
-            }
-
+        backgroundChannel?.invokeMethod("lap", null, makeSimpleResult<Any>("lap") {
+            listeners.invoke { it.onStatusChanged() }
+            querySensors()
         })
     }
 
     fun finish(save: Boolean, callback: (Int?) -> Unit) {
-        backgroundChannel?.invokeMethod("finish", mapOf("save" to save), object : Result {
-            override fun notImplemented() {
-            }
-
-            override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
-                Log.e("Recording", "Not finished: $errorCode, $errorMessage")
-            }
-
-            override fun success(result: Any?) {
-                listeners.invoke { it.onStatusChanged() }
-                callback(result as Int?)
-            }
-
+        backgroundChannel?.invokeMethod("finish", mapOf("save" to save), makeSimpleResult<Int>("finish") {
+            listeners.invoke { it.onStatusChanged() }
+            querySensors()
+            callback(it)
         })
     }
 
@@ -326,4 +268,22 @@ class RecordingService : ConnectableService() {
         }
     }
 
+}
+
+@Suppress("UNCHECKED_CAST")
+fun <T>makeSimpleResult(name: String, callback: (T?) -> Unit?): Result {
+    return object : Result {
+        override fun notImplemented() {
+            Log.w("Recording", "Not implemented: $name")
+        }
+
+        override fun error(errorCode: String?, errorMessage: String?, errorDetails: Any?) {
+            Log.e("Recording", "Error: $errorCode, $errorMessage, $errorDetails")
+        }
+
+        override fun success(result: Any?) {
+            callback(result as T?)
+        }
+
+    }
 }

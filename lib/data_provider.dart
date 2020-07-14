@@ -133,11 +133,15 @@ class DataProvider {
         case 'sensorsData':
           final args = call.arguments as Map;
           return () async {
-            final data =
-                await provider.records.sensorsData(args, provider.indicators);
+            final sensorsData = await provider.records
+                .sensorsData(args, provider.indicators, provider.profiles);
             final sensors =
                 await provider.records.sensorStatus(args, provider.indicators);
-            return {'data': data, 'status': sensors};
+            return {
+              'data': sensorsData.data,
+              'status': sensors,
+              'status_text': sensorsData.status
+            };
           }();
         case 'export':
           final args = call.arguments as Map;

@@ -12,7 +12,7 @@ abstract class SensorHandler {
   void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache);
 
   Trackpoint _last(Iterable<Trackpoint> list) =>
-      list != null && list.isNotEmpty ? list.last : null;
+      list?.isNotEmpty == true ? list.last : null;
 
   double _divide(double a, b) {
     if (a == null || b == null || b == 0) return 0;
@@ -467,5 +467,12 @@ class SensorIndicatorManager {
           ['ts', 'distance'], [finishTime.toDouble(), distance]);
     }
     return [Trackpoint(startTime, 0, start), Trackpoint(finishTime, 0, finish)];
+  }
+
+  String formatFor(String name, Map<String, double> data) {
+    final value = data[name] ?? 0.0;
+    final indicator = indicators[name];
+    if (indicator != null) return indicator.format(value, data);
+    return '?';
   }
 }
