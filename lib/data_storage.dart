@@ -337,7 +337,7 @@ class RecordStorage extends DatabaseStorage {
           where: '"status"=?',
           whereArgs: [2],
           orderBy: '"started" desc',
-          limit: 25);
+          limit: 50);
       return list.map((row) => _toRecord(row)).toList();
     });
   }
@@ -359,7 +359,7 @@ class RecordStorage extends DatabaseStorage {
       List<Map<String, double>> results) {
     list.forEach((element) {
       if (element.status == 2) {
-        laps?.add(trackpoints.length - 1);
+        laps?.add(results?.length - 1);
         sensors
             .all()
             .forEach((element) => element.handleLap(trackpoints, cache));

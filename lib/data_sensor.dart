@@ -449,8 +449,11 @@ class SensorIndicatorManager {
   final _connectedHandler = ConnectedSensorHandler();
 
   SensorHandler handler(String id) => _handlers[id] ?? _connectedHandler;
-  Iterable<SensorHandler> all() =>
-      <SensorHandler>[_handlers['time'], _handlers['time'], _connectedHandler];
+  Iterable<SensorHandler> all() => <SensorHandler>[
+        _handlers['time'],
+        _handlers['location'],
+        _connectedHandler
+      ];
 
   List<Trackpoint> makeManualTrackpoints(
       DateTime started, int duration, double distance) {

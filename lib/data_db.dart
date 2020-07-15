@@ -109,10 +109,14 @@ class DbWrapperChannel {
         return _db.openSession((t) => t.delete(args['table'],
             where: args['where'], whereArgs: args['whereArgs']));
       case 'insert':
-        return _db.openSession((t) => t.insert(args['table'], args['values'],
+        Map values = args['values'];
+        return _db.openSession((t) => t.insert(
+            args['table'], values.cast<String, dynamic>(),
             nullColumnHack: args['nullColumnHack']));
       case 'update':
-        return _db.openSession((t) => t.update(args['table'], args['values'],
+        Map values = args['values'];
+        return _db.openSession((t) => t.update(
+            args['table'], values.cast<String, dynamic>(),
             where: args['where'], whereArgs: args['whereArgs']));
       case 'query':
         return _db.openSession((t) => t.query(

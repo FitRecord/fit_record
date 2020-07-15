@@ -58,9 +58,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders = [exportAuthorities:"org.fitrecord.android.export.debug"]
+        }
         release {
             applicationIdSuffix ".release"
             signingConfig signingConfigs.release
+            manifestPlaceholders = [exportAuthorities:"org.fitrecord.android.export"]
         }
     }
     buildToolsVersion '29.0.3'

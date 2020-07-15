@@ -36,7 +36,7 @@
         <service android:name=".service.CommService" android:enabled="true"/>
         <provider
             android:exported="false"
-            android:authorities="org.fitrecord.android.export"
+            android:authorities="${exportAuthorities}"
             android:name="androidx.core.content.FileProvider"
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/fileprovider"/>

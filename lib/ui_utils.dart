@@ -175,25 +175,35 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
 
   final smoothValue = (int index) {
     if (smooth == 0) return entries[index].value;
-    final indexes = [
-      for (var i = max(0, index - smooth);
-          i < min(entries.length, index + smooth);
-          i++)
-        entries[i].value
-    ];
+
+    int start = index - smooth;
+    int end = index + smooth;
+    if (start < 0) {
+      start = 0;
+      end = 2 * smooth;
+    }
+    if (end > entries.length) {
+      end = entries.length;
+      start = end - 2 * smooth;
+    }
+    final indexes = [for (var i = max(0, start); i < end; i++) entries[i].value]
+        .where((v) => v != null);
+    if (indexes.length < 2) return entries[index].value;
     final sum = indexes.reduce((value, element) => value + element);
     return sum / indexes.length;
   };
 
   List<double> minMaxAvg() {
     double _min, _max, _avg = 0;
-    List.generate(entries.length, (index) => index).forEach((index) {
-      final val = smoothValue(index);
+    final list = List.generate(entries.length, (index) => smoothValue(index))
+        .where((v) => v != null);
+    list.forEach((val) {
       if (_min == null || _min > val) _min = val;
       if (_max == null || _max < val) _max = val;
       _avg += val;
     });
-    return [_min, _max, _avg / data.length];
+    if (list.isEmpty) return [0, 0, 0];
+    return [_min, _max, _avg / list.length];
   }
 
   final stat = minMaxAvg();
@@ -222,7 +232,9 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
       colorFn: (entry, index) => color,
       domainFn: (entry, index) => entry.key,
       measureFn: (entry, index) {
-        final val = (smoothValue(index) - minus) * mul;
+        final v = smoothValue(index);
+        if (v == null) return null;
+        final val = (v - minus) * mul;
         return invert ? 100 - val : val;
       },
       data: entries);
