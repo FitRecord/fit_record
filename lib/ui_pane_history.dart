@@ -12,6 +12,10 @@ class HistoryPane extends MainPaneState {
   Map<int, Profile> _profiles;
   final _dateTimeFormat = dateTimeFormat();
 
+  _historyUpdated() {
+    _load(context);
+  }
+
   Future _load(BuildContext ctx) async {
     try {
       final list = await widget.provider.records.history();
@@ -26,8 +30,15 @@ class HistoryPane extends MainPaneState {
   }
 
   @override
+  void dispose() {
+    widget.provider.recording.historyNotifier.removeListener(_historyUpdated);
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
+    widget.provider.recording.historyNotifier.addListener(_historyUpdated);
     _load(context);
   }
 
@@ -36,14 +47,22 @@ class HistoryPane extends MainPaneState {
     return _load(ctx);
   }
 
+  Future _startImport(BuildContext ctx) async {
+    widget.provider.recording.startImport();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('History'),
-        actions: [
+        actions: <Widget>[
           IconButton(
-              icon: Icon(Icons.add), onPressed: () => _addRecord(context))
+              icon: Icon(Icons.add), onPressed: () => _addRecord(context)),
+          dotsMenu(
+              context,
+              HashMap.fromIterables(
+                  ["Import TCX..."], [() => _startImport(context)])),
         ],
       ),
       body: RefreshIndicator(
@@ -59,7 +78,7 @@ class HistoryPane extends MainPaneState {
     final yes = await yesNoDialog(ctx, 'Delete selected record?');
     if (!yes) return;
     try {
-      widget.provider.records.deleteOne(record);
+      await widget.provider.records.deleteOne(record);
       return _load(ctx);
     } catch (e) {
       print('Error deleting: $e');
@@ -246,6 +265,18 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     );
   }
 
+  ChartSeries _cadenceSeries(BuildContext ctx, Map<int, double> data,
+      {double average}) {
+    return chartsMake(
+      ctx,
+      data,
+      'cadence',
+      charts.MaterialPalette.pink.shadeDefault,
+      widget.provider.indicators.indicators['sensor_cadence'],
+      average: average,
+    );
+  }
+
   ChartSeries _powerSeries(BuildContext ctx, Map<int, double> data,
       {bool extended = false}) {
     return chartsMake(
@@ -278,20 +309,14 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     final indicator = _profile.speedIndicator();
     final altitude =
         _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
-    final hrm = _hrmSeries(ctx, item.extractData('sensor_hrm', from, to));
-    final power = _powerSeries(ctx, item.extractData('sensor_power', from, to));
-    final pace = _paceSpeedSeries(
-        ctx, indicator, item.extractData(indicator, from, to), true);
     final row = to != null ? item.trackpoints[to] : item.trackpoints.last;
     final sensors =
         renderSensors(ctx, widget.provider.indicators, row, page, 'Overview:');
-    final axis = [altitude, hrm, power, pace];
-    final chart = chartsMakeChart(ctx, axis, chartsNoTicksAxis());
-    final pace2 = _paceSpeedSeries(ctx, _profile.speedIndicator(),
+    final pace = _paceSpeedSeries(ctx, _profile.speedIndicator(),
         item.extractData(_profile.speedIndicator(), from, to), true,
         average: row['loc_${scope}_${indicator}']);
-    final paceChart = chartsMakeChart(ctx, [altitude, pace2], pace2?.axisSpec);
-    return columnMaybe([sensors, chart, paceChart]);
+    final paceChart = chartsMakeChart(ctx, [altitude, pace], pace?.axisSpec);
+    return columnMaybe([sensors, paceChart]);
   }
 
   Widget _buildHrm(BuildContext ctx, Record item, int from, int to) {
@@ -340,6 +365,31 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     return columnMaybe([sensors, chart]);
   }
 
+  Widget _buildCadence(BuildContext ctx, Record item, int from, int to) {
+    final scope = to != null ? 'lap' : 'total';
+    final page = [
+      [
+        {'id': 'sensor_cadence_${scope}_avg'},
+      ],
+      [
+        {'id': 'sensor_cadence_${scope}_min'},
+        {'id': 'sensor_cadence_${scope}_max'},
+      ]
+    ];
+    final altitude =
+        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
+    final cadence =
+        _cadenceSeries(ctx, item.extractData('sensor_cadence', from, to));
+    final chart = chartsMakeChart(ctx, [altitude, cadence], cadence?.axisSpec);
+    final sensors = renderSensors(
+        ctx,
+        widget.provider.indicators,
+        to != null ? item.trackpoints[to] : item.trackpoints.last,
+        page,
+        'Cadence:');
+    return columnMaybe([sensors, chart]);
+  }
+
   Widget _buildTab(BuildContext ctx, int index, Record record) {
     final listItems = <Widget>[];
     int endIndex;
@@ -349,10 +399,10 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       listItems.add(_buildEditForm(context, record));
       listItems.add(_buildOverview(context, record, 0, null));
     } else {
+      startIndex = index > 0 ? record.laps[index - 1] + 1 : 0;
       endIndex = index < record.laps.length
           ? record.laps[index]
           : record.trackpoints.length - 1;
-      startIndex = index > 0 ? record.laps[index - 1] + 1 : 0;
       listItems.add(_buildOverview(context, record, startIndex, endIndex));
     }
     if (record.trackpoints.last.containsKey('sensor_hrm')) {
@@ -360,6 +410,9 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     }
     if (record.trackpoints.last.containsKey('sensor_power')) {
       listItems.add(_buildPower(ctx, record, startIndex, endIndex));
+    }
+    if (record.trackpoints.last.containsKey('sensor_cadence')) {
+      listItems.add(_buildCadence(ctx, record, startIndex, endIndex));
     }
     return ListView(
       children: listItems,

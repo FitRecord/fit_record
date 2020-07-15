@@ -1,7 +1,9 @@
 package org.fitrecord.android
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothGattCharacteristic
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
@@ -14,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 import org.fitrecord.android.service.*
 
 class MainActivity : FlutterActivity() {
+    private val IMPORT_FILE = 2
     private val REQUEST_PERMISSIONS = 1
     private val BACKGROUND_CHANNEL = "org.fitrecord/background"
     private val RECORDING_CHANNEL = "org.fitrecord/recording"
@@ -39,6 +42,10 @@ class MainActivity : FlutterActivity() {
 
         override fun onSensorStatus(data: List<Map<String, Int?>>) {
             runOnUiThread { recordingChannel.invokeMethod("sensorStatusUpdated", data) }
+        }
+
+        override fun onHistoryUpdated(record: Int?) {
+            runOnUiThread { recordingChannel.invokeMethod("historyUpdated", mapOf("record_id" to record)) }
         }
 
     }
@@ -171,6 +178,25 @@ class MainActivity : FlutterActivity() {
                     comm.export(this, it.backgroundChannel, result, args["id"] as Int, args["type"] as String)
                 }
             }
+            "import" -> commService.with { comm ->
+                comm.importStart(this, IMPORT_FILE)
+                result.success(null)
+            }
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (resultCode == Activity.RESULT_OK) {
+            when (requestCode) {
+                IMPORT_FILE -> {
+                    commService.with { comm ->
+                        recordingService.with { rec ->
+                            comm.importComplete(data, rec.importFile())
+                        }
+                    }
+                }
+            }
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 }

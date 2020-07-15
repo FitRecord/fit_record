@@ -6,6 +6,8 @@ import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
 import android.content.pm.ResolveInfo
+import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
@@ -13,6 +15,9 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.Result
 import org.fitrecord.android.MainActivity
 import java.io.File
+import java.io.FileDescriptor
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 class CommService : ConnectableService() {
 
@@ -62,5 +67,37 @@ class CommService : ConnectableService() {
             Log.e("Comm", "Share error:", t)
         }
         return false
+    }
+
+    fun importStart(activity: MainActivity, code: Int) {
+        try {
+            val requestIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "*/*"
+            }
+            activity.startActivityForResult(Intent.createChooser(requestIntent, "TCX file import"), code)
+        } catch (e: Exception) {
+            Log.e("Comm", "Failed to start import", e)
+        }
+    }
+
+    fun importComplete(intent: Intent?, callback: (String) -> Unit) {
+        intent?.data?.let { uri ->
+            try {
+                contentResolver.openFileDescriptor(uri, "r")
+            } catch (e: Exception) {
+                Log.e("Comm", "Error importing file", e)
+                return
+            }?.let { fd ->
+                try {
+                    val outFile = File.createTempFile("fit_record_", ".xml")
+                    FileInputStream(fd.fileDescriptor).use { w ->
+                        FileOutputStream(outFile).use { f -> w.copyTo(f) }
+                        callback(outFile.absolutePath)
+                    }
+                } catch (e: Exception) {
+                    Log.e("Comm", "Error copying file", e)
+                }
+            }
+        }
     }
 }

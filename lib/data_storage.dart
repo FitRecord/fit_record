@@ -564,4 +564,9 @@ class ProfileStorage extends DatabaseStorage {
     });
     return result;
   }
+
+  Future<Profile> findByType(String type) async {
+    return all().then(
+        (list) => list.firstWhere((p) => p.type == type, orElse: () => null));
+  }
 }

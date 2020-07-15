@@ -31,6 +31,7 @@ interface RecordingListener {
     fun onStatusChanged()
     fun onSensorData(data: Map<String, Double>)
     fun onSensorStatus(data: List<Map<String, Int?>>)
+    fun onHistoryUpdated(record: Int?);
 }
 
 class RecordingService : ConnectableService() {
@@ -268,10 +269,18 @@ class RecordingService : ConnectableService() {
         }
     }
 
+    fun importFile(): (String) -> Unit {
+        return {
+            backgroundChannel?.invokeMethod("import", mapOf("file" to it), makeSimpleResult<Int>("import") { id ->
+                listeners.invoke { it.onHistoryUpdated(id) }
+            })
+        }
+    }
+
 }
 
 @Suppress("UNCHECKED_CAST")
-fun <T>makeSimpleResult(name: String, callback: (T?) -> Unit?): Result {
+fun <T> makeSimpleResult(name: String, callback: (T?) -> Unit?): Result {
     return object : Result {
         override fun notImplemented() {
             Log.w("Recording", "Not implemented: $name")

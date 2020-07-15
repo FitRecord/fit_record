@@ -22,6 +22,7 @@ class RecordingController {
   final _recordingChannel = MethodChannel('org.fitrecord/recording');
   final newSensorFound = ValueNotifier<Sensor>(null);
   final statusNotifier = ChangeNotifier();
+  final historyNotifier = ChangeNotifier();
   final sensorDataUpdated = ValueNotifier<Map>(null);
   final sensorStatusUpdated = ValueNotifier<List<Map<String, int>>>(null);
 
@@ -51,6 +52,9 @@ class RecordingController {
               .map((e) => e.cast<String, int>())
               .toList();
           sensorStatusUpdated.value = list;
+          return;
+        case 'historyUpdated':
+          historyNotifier.notifyListeners();
           return;
       }
     });
@@ -96,6 +100,10 @@ class RecordingController {
 
   Future<String> export(int id, String type) async {
     return _recordingChannel.invokeMethod('export', {'id': id, 'type': type});
+  }
+
+  Future startImport() {
+    return _recordingChannel.invokeMethod('import');
   }
 }
 
@@ -146,6 +154,9 @@ class DataProvider {
         case 'export':
           final args = call.arguments as Map;
           return provider.exportOne(args['id'], args['type'], args['dir']);
+        case 'import':
+          final args = call.arguments as Map;
+          return provider.importOne('tcx', args['file']);
       }
     });
     await _backgroundChannel.invokeMethod('initialized');
@@ -200,5 +211,11 @@ class DataProvider {
     await export.exportToFile(
         exporter.export(profile, record, trackpoints), path);
     return {'file': path, 'content_type': exporter.contentType()};
+  }
+
+  Future<int> importOne(String type, String file) async {
+    final exporter = export.exporter(type);
+    if (exporter == null) throw ArgumentError('Invalid import type');
+    return export.importFile(exporter, records, profiles, file);
   }
 }

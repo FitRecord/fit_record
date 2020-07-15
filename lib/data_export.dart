@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:android/data_storage.dart';
+import 'package:uuid/uuid.dart';
 import 'package:xml/xml.dart';
 import 'package:xml/xml_events.dart';
 
@@ -9,6 +11,27 @@ abstract class Exporter {
       Profile profile, Record record, Iterable<Trackpoint> trackpoints);
 
   String contentType();
+
+  Future import(
+      Stream<String> input,
+      Future Function(String, DateTime) recordHandler,
+      Future Function(int, DateTime, Map<String, Map<String, double>>)
+          trackpointHandler);
+}
+
+enum _TCXLocation {
+  Skip,
+  Activity,
+  Id,
+  Lap,
+  Time,
+  Lat,
+  Lon,
+  Altitude,
+  Distance,
+  Hrm,
+  Cadence,
+  Power,
 }
 
 class TCXExport extends Exporter {
@@ -87,12 +110,16 @@ class TCXExport extends Exporter {
               items.add(xmlElement('HeartRateBpm', '',
                   children: [xmlElement('Value', hrm.toString())]));
             final cadence = dataValue(tp.data, null, 'cadence');
-            if (cadence != null)
-              items.add(xmlElement('Cadence', '',
-                  children: [xmlElement('Value', cadence.toString())]));
+            if (cadence != null) {
+              items.add(xmlElement('Cadence', cadence.toString()));
+              ext.add(xmlElement('RunCadence', cadence.toString(), ns: "tcx"));
+            }
             final power = dataValue(tp.data, null, 'power');
             if (power != null)
               ext.add(xmlElement('Watts', power.toString(), ns: "tcx"));
+            final speed = dataValue(tp.data, null, 'speed_ms');
+            if (speed != null)
+              ext.add(xmlElement('Speed', speed.toString(), ns: "tcx"));
             if (ext.isNotEmpty)
               items.add(xmlElement('Extensions', '',
                   children: [xmlElement('TPX', '', children: ext, ns: "tcx")]));
@@ -129,7 +156,148 @@ class TCXExport extends Exporter {
 
   @override
   String contentType() => 'application/vnd.garmin.tcx+xml';
-//  String contentType() => 'text/plain';
+
+  @override
+  Future import(
+      Stream<String> input,
+      Function(String, DateTime) recordHandler,
+      Function(int, DateTime, Map<String, Map<String, double>>)
+          trackpointHandler) {
+    double lat, lon, alt, hrm, power, speed, distance, cadence;
+    DateTime ts;
+    String id, type;
+    _TCXLocation loc;
+    return input
+        .transform(const XmlEventDecoder())
+        .transform(const XmlNormalizer())
+        .expand((events) => events)
+        .asyncMap<dynamic>((event) {
+      switch (event.nodeType) {
+        case XmlNodeType.ELEMENT:
+          if (event is XmlStartElementEvent) {
+            final evt = event;
+            switch (evt.localName) {
+              case "Activity":
+                type = evt.attributes
+                    .firstWhere((att) => att.localName == "Sport",
+                        orElse: () => null)
+                    ?.value;
+                loc = _TCXLocation.Activity;
+                break;
+              case "Id":
+                loc = _TCXLocation.Id;
+                break;
+              case "Lap":
+                loc = _TCXLocation.Lap;
+                return trackpointHandler(2, null, null);
+              case "Track":
+                if (loc != _TCXLocation.Lap) {
+                  // Resume
+                  return trackpointHandler(1, null, null);
+                }
+                break;
+              case "Trackpoint":
+                ts = null;
+                lat = null;
+                lon = null;
+                alt = null;
+                hrm = null;
+                power = null;
+                speed = null;
+                cadence = null;
+                break;
+              case "Time":
+                loc = _TCXLocation.Time;
+                break;
+              case "LatitudeDegrees":
+                loc = _TCXLocation.Lat;
+                break;
+              case "LongitudeDegrees":
+                loc = _TCXLocation.Lon;
+                break;
+              case "AltitudeMeters":
+                loc = _TCXLocation.Altitude;
+                break;
+              case "DistanceMeters":
+                loc = _TCXLocation.Distance;
+                break;
+              case "HeartRateBpm":
+                loc = _TCXLocation.Hrm;
+                break;
+              case "Watts":
+                loc = _TCXLocation.Power;
+                break;
+              case "RunCadence":
+              case "Cadence":
+                loc = _TCXLocation.Cadence;
+                break;
+            }
+          }
+          if (event is XmlEndElementEvent) {
+            switch (event.localName) {
+              case "Trackpoint":
+                final data = {
+                  'time': Map<String, double>(),
+                  'location': Map<String, double>(),
+                  'sensor': Map<String, double>()
+                };
+                data['time']['now'] = ts?.millisecondsSinceEpoch?.toDouble();
+                data['location']['ts'] = ts?.millisecondsSinceEpoch?.toDouble();
+                if (lat != null && lon != null) {
+                  data['location']['latitude'] = lat;
+                  data['location']['longitude'] = lon;
+                }
+                if (alt != null) data['location']['altitude'] = alt;
+                if (distance != null) data['sensor']['distance_m'] = distance;
+                if (hrm != null) data['sensor']['hrm'] = hrm;
+                if (power != null) data['sensor']['power'] = power;
+                if (cadence != null) data['sensor']['cadence'] = cadence * 2.0;
+                return trackpointHandler(0, ts, data);
+            }
+          }
+          break;
+        case XmlNodeType.TEXT:
+          final evt = event as XmlTextEvent;
+          _parse(double value) {
+            final v = double.tryParse(evt.text.trim());
+            if (v == null) return value;
+            return v;
+          }
+          switch (loc) {
+            case _TCXLocation.Id:
+              id = evt.text.trim();
+              loc = _TCXLocation.Skip;
+              return recordHandler(type, DateTime.tryParse(id));
+            case _TCXLocation.Time:
+              ts = DateTime.tryParse(evt.text.trim());
+              loc = _TCXLocation.Skip;
+              break;
+            case _TCXLocation.Lat:
+              lat = _parse(lat);
+              break;
+            case _TCXLocation.Lon:
+              lon = _parse(lon);
+              break;
+            case _TCXLocation.Altitude:
+              alt = _parse(alt);
+              break;
+            case _TCXLocation.Distance:
+              distance = _parse(distance);
+              break;
+            case _TCXLocation.Hrm:
+              hrm = _parse(hrm);
+              break;
+            case _TCXLocation.Power:
+              power = _parse(power);
+              break;
+            case _TCXLocation.Cadence:
+              cadence = _parse(cadence);
+              break;
+          }
+          break;
+      }
+    }).drain();
+  }
 }
 
 class ExportManager {
@@ -144,5 +312,54 @@ class ExportManager {
   Future exportToFile(Stream<String> export, String path) async {
     final str = await export.join('');
     return File(path).writeAsString(str, flush: true);
+  }
+
+  Future<int> importFile(Exporter exporter, RecordStorage records,
+      ProfileStorage profiles, String file) async {
+    print('importFile: $file $exporter');
+    final stream = File(file).openRead().transform(utf8.decoder);
+    int id;
+    await records.openSession((t) async {
+      DateTime last; // Last timestamp
+      await exporter.import(stream, (type, created) async {
+        print('recordCallback: $type, $created');
+        final profile = await profiles.findByType(type);
+        if (profile == null) throw ArgumentError.notNull('profile');
+        if (created == null) throw ArgumentError.notNull('created');
+        id = await t.insert('"records"', {
+          'uid': Uuid().v4(),
+          'profile_id': profile.id,
+          'started': created.millisecondsSinceEpoch,
+          'status': 2,
+        });
+        return id;
+      }, (type, ts, data) async {
+//        print('trackpointCallback: $type, $ts, $data');
+        if (id == null) throw ArgumentError.notNull('id');
+        switch (type) {
+          case 1:
+          case 2:
+            if (last != null)
+              return t.insert('"trackpoints"', {
+                'record_id': id,
+                'added': last.millisecondsSinceEpoch,
+                'status': type,
+                'data': jsonEncode(Map()),
+              });
+            break;
+          case 0:
+            if (ts == null) throw ArgumentError.notNull('timestamp');
+            if (data == null) throw ArgumentError.notNull('data');
+            last = ts;
+            return t.insert('"trackpoints"', {
+              'record_id': id,
+              'added': last.millisecondsSinceEpoch,
+              'status': 0,
+              'data': jsonEncode(data),
+            });
+        }
+      });
+    });
+    return id;
   }
 }
