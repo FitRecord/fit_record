@@ -26,5 +26,5 @@ request_body="$(base64var "$header").$(base64var "$claim")"
 signature=$(openssl dgst -sha256 -sign <(echo "$private_key") <(printf "$request_body") | base64stream)
 jwt_token="$request_body.$signature"
 
-token="$(curl -s -X POST https://www.googleapis.com/oauth2/v4/token --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' --data-urlencode "assertion=$jwt_token" | jq -r .access_token)"
+token="$(curl -sS -X POST https://www.googleapis.com/oauth2/v4/token --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' --data-urlencode "assertion=$jwt_token" | jq -r .access_token)"
 printf $token
