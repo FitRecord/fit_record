@@ -37,30 +37,34 @@ jobs:
             echo "Invalid token" >&2
             exit 1
           fi
-          edit_id=$(curl -sS -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits | jq -r .id)
+          output=$(curl -sS -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits)
+          edit_id=$(echo $output | jq -r .id)
           if [ $edit_id == "null" ]
           then
-            echo "Invalid editId" >&2
+            echo "Invalid editId: $output" >&2
             exit 1
           fi
-          version_code=$(curl -sS -X POST -m 180 --data-binary '@./build/app/outputs/bundle/release/app-release.aab' -H "Content-Type: application/octet-stream" -H "Authorization: Bearer $token" https://www.googleapis.com/upload/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/bundles?uploadType=media | jq -r .versionCode)
+          output=$(curl -sS -X POST -m 180 --data-binary '@./build/app/outputs/bundle/release/app-release.aab' -H "Content-Type: application/octet-stream" -H "Authorization: Bearer $token" https://www.googleapis.com/upload/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/bundles?uploadType=media)
+          version_code=$(echo $output | jq -r .versionCode)
           if [ $version_code == "null" ]
           then
-            echo "Invalid versionCode" >&2
+            echo "Invalid versionCode: $output" >&2
             exit 1
           fi
           echo "Version code: ${version_code}"
-          track_name=$(curl -sS -X PATCH -d '{"releases":[{"versionCodes":[${version_code}],"releaseNotes":[{"language": "en-US", "text": "* TBA"}], "status": "draft"}]}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/tracks/internal | jq -r .track)
+          output=$(curl -sS -X PATCH -d '{"releases":[{"versionCodes":[${version_code}],"releaseNotes":[{"language": "en-US", "text": "* TBA"}], "status": "draft"}]}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/tracks/internal)
+          track_name=$(echo $output | jq -r .track)
           if [ $track_name == "null" ]
           then
-            echo "Invalid track patch" >&2
+            echo "Invalid track patch: $output" >&2
             exit 1
           fi
           echo "Track name: ${track_name}"
-          edit_id=$(curl -sS -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}:commit | jq -r .id)
+          output=$(curl -sS -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}:commit)
+          edit_id=$(echo $output | jq -r .id)
           if [ $edit_id == "null" ]
           then
-            echo "Invalid editId in commit" >&2
+            echo "Invalid editId in commit: $output" >&2
             exit 1
           fi
           echo "Commit has been successful: ${edit_id}"
