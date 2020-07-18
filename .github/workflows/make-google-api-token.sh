@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# set -euo pipefail
+set -euo pipefail
 
 base64var() {
     printf "$1" | base64stream
@@ -10,9 +10,13 @@ base64stream() {
     base64 | tr '/+' '_-' | tr -d '=\n'
 }
 
-scope=$1
-sa_email=$2
+scope="$1"
+sa_email="$2"
 private_key=$(echo "\"$3\"" | jq -r .)
+if [ -z $private_key ]
+then
+  exit 1
+fi
 valid_for_sec=${4:-3600}
 
 header='{"alg":"RS256","typ":"JWT"}'
