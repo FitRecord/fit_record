@@ -20,16 +20,7 @@ fi
 valid_for_sec=${4:-3600}
 
 header='{"alg":"RS256","typ":"JWT"}'
-claim=$(cat <<EOF | jq -c
-  {
-    "iss": "$sa_email",
-    "scope": "$scope",
-    "aud": "https://www.googleapis.com/oauth2/v4/token",
-    "exp": $(($(date +%s) + $valid_for_sec)),
-    "iat": $(date +%s)
-  }
-EOF
-)
+claim=$(echo {\"iss\": \"$sa_email\",\"scope\": \"$scope\",\"aud\": \"https://www.googleapis.com/oauth2/v4/token\", \"exp\": $(($(date +%s) + $valid_for_sec)), \"iat\": $(date +%s)})
 
 request_body="$(base64var "$header").$(base64var "$claim")"
 signature=$(openssl dgst -sha256 -sign <(echo "$private_key") <(printf "$request_body") | base64stream)
