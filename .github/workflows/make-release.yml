@@ -49,6 +49,12 @@ jobs:
             echo "Invalid versionCode" >&2
             exit 1
           fi
+          track_name=$(curl -X PATCH -d '{"releases":[{"versionCodes":["${version_code}"]},"releaseNotes":[{"language": "en-US", "text": "* TBA"}], "status": "draft"]}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/tracks/internal | jq -r .track)
+          if [ -z "track_name" ]
+          then
+            echo "Invalid track patch" >&2
+            exit 1
+          fi
           curl -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}:commit
           echo "Commit status $?"
       - name: Create Release
