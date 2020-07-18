@@ -43,8 +43,7 @@ jobs:
             echo "Invalid editId" >&2
             exit 1
           fi
-          #  | jq -r .versionCode
-          version_code=$(curl -sS -X POST -m 180 --data-binary '@./build/app/outputs/bundle/release/app-release.aab' -H "Content-Type: application/octet-stream" -H "Authorization: Bearer $token" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/bundles?uploadType=media)
+          version_code=$(curl -sS -X POST -m 180 --data-binary '@./build/app/outputs/bundle/release/app-release.aab' -H "Content-Type: application/octet-stream" -H "Authorization: Bearer $token" https://www.googleapis.com/upload/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/bundles?uploadType=media | jq -r .versionCode)
           if [ $version_code == "null" ]
           then
             echo "Invalid versionCode" >&2
