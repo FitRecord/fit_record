@@ -49,14 +49,21 @@ jobs:
             echo "Invalid versionCode" >&2
             exit 1
           fi
-          track_name=$(curl -X PATCH -d '{"releases":[{"versionCodes":["${version_code}"]},"releaseNotes":[{"language": "en-US", "text": "* TBA"}], "status": "draft"]}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/tracks/internal | jq -r .track)
+          echo "Version code: ${version_code}"
+          track_name=$(curl -X PATCH -d '{"releases":[{"versionCodes":[${version_code}],"releaseNotes":[{"language": "en-US", "text": "* TBA"}], "status": "draft"}]}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/tracks/internal | jq -r .track)
           if [ -z "track_name" ]
           then
             echo "Invalid track patch" >&2
             exit 1
           fi
-          curl -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}:commit
-          echo "Commit status $?"
+          echo "Track name: ${track_name}"
+          edit_id=$(curl -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}:commit | jq -r .id)
+          if [ -z "$edit_id" ]
+          then
+            echo "Invalid editId" >&2
+            exit 1
+          fi
+          echo "Commit has been successful: ${edit_id}"
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.1.1
