@@ -38,29 +38,29 @@ jobs:
             exit 1
           fi
           edit_id=$(curl -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits | jq -r .id)
-          if [ -z "$edit_id" ]
+          if [ $edit_id == "null" ]
           then
             echo "Invalid editId" >&2
             exit 1
           fi
-          version_code=$(curl -X POST -F 'file=@./build/app/outputs/bundle/release/app-release.aab;type=application/octet-stream' -H "Authorization: Bearer $token" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/bundles?uploadType=media | jq -r .versionCode)
-          if [ -z "version_code" ]
+          version_code=$(curl -X POST -m 180 -F 'file=@./build/app/outputs/bundle/release/app-release.aab;type=application/octet-stream' -H "Authorization: Bearer $token" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/bundles?uploadType=media | jq -r .versionCode)
+          if [ $version_code == "null" ]
           then
             echo "Invalid versionCode" >&2
             exit 1
           fi
           echo "Version code: ${version_code}"
           track_name=$(curl -X PATCH -d '{"releases":[{"versionCodes":[${version_code}],"releaseNotes":[{"language": "en-US", "text": "* TBA"}], "status": "draft"}]}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}/tracks/internal | jq -r .track)
-          if [ -z "track_name" ]
+          if [ $track_name == "null" ]
           then
             echo "Invalid track patch" >&2
             exit 1
           fi
           echo "Track name: ${track_name}"
           edit_id=$(curl -X POST -d '{}' -H "Authorization: Bearer $token" -H "Content-Type: application/json" https://www.googleapis.com/androidpublisher/v3/applications/org.fitrecord.android.release/edits/${edit_id}:commit | jq -r .id)
-          if [ -z "$edit_id" ]
+          if [ $edit_id == "null" ]
           then
-            echo "Invalid editId" >&2
+            echo "Invalid editId in commit" >&2
             exit 1
           fi
           echo "Commit has been successful: ${edit_id}"
