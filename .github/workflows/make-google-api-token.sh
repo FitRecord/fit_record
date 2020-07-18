@@ -13,7 +13,7 @@ base64stream() {
 scope="$1"
 sa_email="$2"
 private_key=$(echo "\"$3\"" | jq -r .)
-if [ -z $private_key ]
+if [ -z "$private_key" ]
 then
   exit 1
 fi
