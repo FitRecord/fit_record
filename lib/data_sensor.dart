@@ -234,7 +234,8 @@ abstract class IndicatorValue {
   String sensor();
   String group();
   String name();
-  String format(double value, Map<String, double> data);
+  String format(double value, Map<String, dynamic> data);
+  String valueType(double value, Map<String, dynamic> data) => null;
 
   String _pad(int value) => value.toString().padLeft(2, '0');
   String _int(double value) => "${value != null ? value.round() : '?'}";
@@ -261,11 +262,17 @@ abstract class LocationIndicator extends IndicatorValue {
 abstract class HRMIndicator extends IndicatorValue {
   @override
   String sensor() => 'hrm';
+
+  @override
+  String valueType(double value, Map<String, dynamic> data) => 'bpm';
 }
 
 abstract class PowerIndicator extends IndicatorValue {
   @override
   String sensor() => 'power';
+
+  @override
+  String valueType(double value, Map<String, dynamic> data) => 'w';
 }
 
 class DurationIndicator extends TimeIndicator {
@@ -280,7 +287,7 @@ class DurationIndicator extends TimeIndicator {
   String name() => this._name;
 
   @override
-  String format(double value, Map<String, double> data) {
+  String format(double value, Map<String, dynamic> data) {
     return formatDurationSeconds((value / 1000).round(), withHour: true);
   }
 }
@@ -297,14 +304,14 @@ class IntIndicator extends LocationIndicator {
   String name() => this._name;
 
   @override
-  String format(double value, Map<String, double> data) {
+  String format(double value, Map<String, dynamic> data) {
     return _int(value);
   }
 }
 
 class LapIndicator extends LocationIndicator {
   @override
-  String format(double value, Map<String, double> data) {
+  String format(double value, Map<String, dynamic> data) {
     return _int(value + 1);
   }
 
@@ -326,9 +333,12 @@ class DistanceIndicator extends LocationIndicator {
   String name() => this._name;
 
   @override
-  String format(double value, Map<String, double> data) {
+  String format(double value, Map<String, dynamic> data) {
     return _floor(value / 1000, 1);
   }
+
+  @override
+  String valueType(double value, Map<String, dynamic> data) => 'km';
 }
 
 class SpeedIndicator extends LocationIndicator {
@@ -343,7 +353,10 @@ class SpeedIndicator extends LocationIndicator {
   String name() => this._name;
 
   @override
-  String format(double value, Map<String, double> data) {
+  String valueType(double value, Map<String, dynamic> data) => 'km/h';
+
+  @override
+  String format(double value, Map<String, dynamic> data) {
     return _floor(value * 3.6, 1);
   }
 }
@@ -360,7 +373,10 @@ class PaceIndicator extends LocationIndicator {
   String name() => this._name;
 
   @override
-  String format(double value, Map<String, double> data) {
+  String valueType(double value, Map<String, dynamic> data) => 'm/km';
+
+  @override
+  String format(double value, Map<String, dynamic> data) {
     final sec = (value * 1000).round();
     final min = (sec / 60).floor();
     return '$min:${_pad(sec - 60 * min)}';
@@ -472,10 +488,17 @@ class SensorIndicatorManager {
     return [Trackpoint(startTime, 0, start), Trackpoint(finishTime, 0, finish)];
   }
 
-  String formatFor(String name, Map<String, double> data) {
+  String formatSimple(String name, double value) =>
+      formatFor(name, Map.fromIterables([name], [value]), withType: true);
+
+  String formatFor(String name, Map<String, double> data,
+      {bool withType = false}) {
     final value = data[name] ?? 0.0;
     final indicator = indicators[name];
-    if (indicator != null) return indicator.format(value, data);
+    if (indicator != null) {
+      final type = withType ? indicator.valueType(value, data) : null;
+      return '${indicator.format(value, data)}${type != null ? ' ${type}' : ''}';
+    }
     return '?';
   }
 }

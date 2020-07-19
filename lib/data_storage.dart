@@ -90,18 +90,26 @@ class Profile {
       SensorIndicatorManager sensors, Map<String, double> data) {
     final time = sensors.formatFor('time_total', data);
     final distance = sensors.formatFor('loc_total_distance', data);
-    return 'Time: $time, distance: $distance';
+    return 'Time: $time, distance: ${distance} km';
   }
 }
 
 class Record {
   final int id, started, profileID, status;
   final String uid;
-  String title, description;
+  String title, description, meta;
   List<Map<String, double>> trackpoints;
   List<int> laps;
 
-  Record(this.id, this.uid, this.profileID, this.started, this.status);
+  Record(
+      this.id, this.uid, this.profileID, this.started, this.status, this.meta);
+
+  Map<String, dynamic> get metaJson {
+    try {
+      if (meta != null) return jsonDecode(meta);
+    } catch (e) {}
+    return null;
+  }
 
   String smartTitle() {
     return title ??
@@ -130,6 +138,18 @@ class SensorsDataResult {
   SensorsDataResult(this.data, this.status);
 }
 
+enum HistoryRange { Week, Month, Year }
+
+class HistoryResult {
+  final List<Record> records;
+  final DateTime start, finish;
+  final Map<String, double> stats;
+  final LinkedHashMap<int, double> keyStats;
+
+  HistoryResult(
+      this.records, this.start, this.finish, this.stats, this.keyStats);
+}
+
 class RecordStorage extends DatabaseStorage {
   RecordStorage([ChannelDbDelegate delegate]) : super(2, delegate);
 
@@ -138,7 +158,7 @@ class RecordStorage extends DatabaseStorage {
 
   Record _toRecord(Map<String, dynamic> row) {
     final r = Record(row['id'], row['uid'], row['profile_id'], row['started'],
-        row['status']);
+        row['status'], row['meta']);
     r.title = row['title'];
     r.description = row['description'];
     return r;
@@ -198,8 +218,7 @@ class RecordStorage extends DatabaseStorage {
     return null;
   }
 
-  Future<int> finish(bool save) async {
-    print('Save: $save');
+  Future<int> finish(SensorIndicatorManager sensors, bool save) async {
     final r = await active();
     if (r == null) return null;
     await openSession((t) async {
@@ -213,7 +232,11 @@ class RecordStorage extends DatabaseStorage {
       }
     });
     _clear();
-    return save ? r.id : null;
+    if (save) {
+      await loadOne(sensors, r.id);
+      return r.id;
+    }
+    return null;
   }
 
   Future<List<Map<String, int>>> sensorStatus(
@@ -331,15 +354,109 @@ class RecordStorage extends DatabaseStorage {
     return trackpoint;
   }
 
-  Future<List<Record>> history() async {
-    return openSession((t) async {
+  DateTime nextFrom(DateTime from, HistoryRange range, [int mul = 0]) {
+    switch (range) {
+      case HistoryRange.Week:
+        final dt = from.subtract(Duration(days: -7 * mul + from.weekday - 1));
+        return DateTime(dt.year, dt.month, dt.day);
+      case HistoryRange.Month:
+        int month = from.month + mul;
+        int year = from.year;
+        while (month < 1) {
+          month += 12;
+          year -= 1;
+        }
+        while (month > 12) {
+          month -= 12;
+          year += 1;
+        }
+        return DateTime(year, month, 1);
+      case HistoryRange.Year:
+        return DateTime(from.year + mul, 1, 1);
+    }
+    return from;
+  }
+
+  void _calcHistoryStats(
+      HistoryResult result, HistoryRange range, List<String> keys, String key) {
+    switch (range) {
+      case HistoryRange.Week:
+        List.generate(7, (index) => index).forEach((val) {
+          final dt = result.start.subtract(Duration(days: -val));
+          result.keyStats[dt.weekday] = null;
+        });
+        break;
+      case HistoryRange.Month:
+        List.generate(result.finish.difference(result.start).inDays + 1,
+            (index) => index).forEach((val) {
+          final dt = result.start.subtract(Duration(days: -val));
+          result.keyStats[dt.day] = null;
+        });
+        break;
+      case HistoryRange.Year:
+        List.generate(12, (index) => index + result.start.month).forEach(
+            (val) => result.keyStats[val > 12 ? val % 12 : val] = null);
+        break;
+    }
+    result.records.forEach((r) {
+      final meta = r.metaJson;
+      if (meta == null) return;
+      _incStat(Map map, dynamic key, String att) {
+        map[key] = (map[key] ?? 0.0) + (meta[att] ?? 0.0);
+      }
+
+      int group;
+      final dt = DateTime.fromMillisecondsSinceEpoch(r.started);
+      switch (range) {
+        case HistoryRange.Week:
+          group = dt.weekday;
+          break;
+        case HistoryRange.Month:
+          group = dt.day;
+          break;
+        case HistoryRange.Year:
+          group = dt.month;
+          break;
+      }
+      keys.forEach((att) {
+        _incStat(result.stats, att, att);
+      });
+      _incStat(result.keyStats, group, key);
+    });
+//    print('Stat: ${result.keyStats} - ${result.start} - ${result.finish}');
+  }
+
+  Future<HistoryResult> history(
+      ProfileStorage profiles, HistoryRange range, DateTime from, int shift,
+      {Profile profile, String type, String statKey}) async {
+    final where = ['"status"=?'];
+    final whereArgs = <dynamic>[2];
+    final start = nextFrom(from, range, -shift);
+    final end = nextFrom(start, range, 1);
+    where.add('"started" >= ? and "started" < ?');
+    whereArgs.add(start.millisecondsSinceEpoch);
+    whereArgs.add(end.millisecondsSinceEpoch);
+    if (profile != null) {
+      where.add('"profile_id"=?');
+      whereArgs.add(profile.id);
+    }
+    final profilesList = await profiles.all();
+    final list = await openSession((t) async {
       final list = await t.query('"records"',
-          where: '"status"=?',
-          whereArgs: [2],
+          where: where.join(' and '),
+          whereArgs: whereArgs,
           orderBy: '"started" desc',
           limit: 50);
       return list.map((row) => _toRecord(row)).toList();
     });
+    final result = HistoryResult(list, start, end.subtract(Duration(days: 1)),
+        Map<String, double>(), LinkedHashMap<int, double>());
+    final keys = [
+      'time_total',
+      'loc_total_distance',
+    ];
+    _calcHistoryStats(result, range, keys, statKey);
+    return result;
   }
 
   Future deleteOne(Record record) async {
@@ -385,6 +502,30 @@ class RecordStorage extends DatabaseStorage {
     });
   }
 
+  Future<Record> _updateMeta(Record item) async {
+    if (item.trackpoints?.isNotEmpty != true) {
+      return item; // Invalid data - no trackpoints
+    }
+    final last = item.trackpoints.last;
+    final meta = Map<String, dynamic>();
+    [
+      'time_total',
+      'time_lap_index',
+      'loc_total_distance',
+      'loc_total_speed_ms',
+      'loc_total_pace_sm',
+      'sensor_hrm_total_avg',
+      'sensor_power_total_avg',
+      'sensor_cadence_total_avg',
+    ].forEach((element) {
+      if (last.containsKey(element)) meta[element] = last[element];
+    });
+    item.meta = jsonEncode(meta);
+    await openSession((t) => t.update('"records"', {'meta': item.meta},
+        where: '"id"=?', whereArgs: [item.id]));
+    return item;
+  }
+
   Future<Record> loadOne(SensorIndicatorManager sensors, int id) async {
     final item = await one(id);
     if (item == null || item.status != 2) return null;
@@ -395,6 +536,9 @@ class RecordStorage extends DatabaseStorage {
     final trackpoints = <Trackpoint>[];
     _processTrackpoints(
         sensors, tps, cache, trackpoints, item.laps, item.trackpoints);
+    if (item.metaJson == null) {
+      return _updateMeta(item);
+    }
     return item;
   }
 
@@ -426,6 +570,7 @@ class RecordStorage extends DatabaseStorage {
           'data': jsonEncode(e.data),
         });
       }));
+      await loadOne(sensors, added);
       return added;
     });
   }

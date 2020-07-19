@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:android/data_sensor.dart';
 import 'package:android/data_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xml/xml.dart';
@@ -314,8 +315,8 @@ class ExportManager {
     return File(path).writeAsString(str, flush: true);
   }
 
-  Future<int> importFile(Exporter exporter, RecordStorage records,
-      ProfileStorage profiles, String file) async {
+  Future<int> importFile(Exporter exporter, SensorIndicatorManager sensors,
+      RecordStorage records, ProfileStorage profiles, String file) async {
     print('importFile: $file $exporter');
     final stream = File(file).openRead().transform(utf8.decoder);
     int id;
@@ -360,6 +361,7 @@ class ExportManager {
         }
       });
     });
+    await records.loadOne(sensors, id);
     return id;
   }
 }

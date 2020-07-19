@@ -110,40 +110,74 @@ Widget renderSensors(BuildContext ctx, SensorIndicatorManager sensors,
 }
 
 Widget renderSensor(BuildContext ctx, double textSize,
-    SensorIndicatorManager manager, Map<String, double> data, String id) {
+    SensorIndicatorManager manager, Map<String, dynamic> data, String id,
+    {bool expand = true,
+    bool caption = true,
+    bool border = true,
+    bool withType = false}) {
   final sensor = manager.indicators[id];
   final theme = Theme.of(ctx);
-  final textTheme = theme.textTheme.caption.copyWith(
+  final textTheme = theme.textTheme.bodyText2.copyWith(
       fontSize: textSize, fontFamily: 'monospace', fontWeight: FontWeight.bold);
-  final rows = [
-    Text(
-      sensor?.format(data[id] ?? 0, data) ?? '?',
-      softWrap: false,
-      textAlign: TextAlign.center,
-      style: textTheme,
-      overflow: TextOverflow.ellipsis,
-    )
-  ];
-  rows.insert(
-      0,
-      Text(
-        sensor?.name() ?? 'Invalid',
-        softWrap: false,
-        textAlign: TextAlign.center,
-      ));
-  return Padding(
-    padding: EdgeInsets.all(3),
-    child: Container(
-      decoration: BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(5)),
-          border: Border.all(color: theme.primaryTextTheme.caption.color)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: rows,
-      ),
+  final mainText = Text(
+    sensor?.format(data[id] ?? 0, data) ?? '?',
+    softWrap: false,
+    textAlign: TextAlign.center,
+    style: textTheme,
+    overflow: TextOverflow.ellipsis,
+  );
+  final rows = <Widget>[];
+  final valueType = sensor?.valueType(data[id], data);
+  if (withType && valueType != null) {
+    rows.add(Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        mainText,
+        Padding(
+          padding: EdgeInsets.all(2.0),
+          child: Text(
+            valueType,
+            softWrap: false,
+            maxLines: 1,
+            style: theme.textTheme.bodyText2,
+          ),
+        ),
+      ],
+      crossAxisAlignment: CrossAxisAlignment.end,
+    ));
+  } else
+    rows.add(mainText);
+  if (caption) {
+    rows.insert(
+        0,
+        Text(
+          sensor?.name() ?? 'Invalid',
+          softWrap: false,
+          maxLines: 1,
+          style: theme.textTheme.bodyText2,
+          textAlign: TextAlign.center,
+        ));
+  }
+  final content = Padding(
+    padding: EdgeInsets.symmetric(horizontal: 4.0),
+    child: Column(
+      crossAxisAlignment:
+          expand ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
     ),
   );
+  if (border)
+    return Padding(
+      padding: EdgeInsets.all(2),
+      child: Container(
+        decoration: BoxDecoration(
+            borderRadius: BorderRadius.all(Radius.circular(3)),
+            border: Border.all(color: theme.primaryTextTheme.caption.color)),
+        child: content,
+      ),
+    );
+  return content;
 }
 
 DateFormat dateTimeFormat() => DateFormat.yMMMd().add_jm();

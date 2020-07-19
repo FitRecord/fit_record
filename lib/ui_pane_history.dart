@@ -6,11 +6,17 @@ import 'package:android/ui_main.dart';
 import 'package:android/ui_utils.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class HistoryPane extends MainPaneState {
-  List<Record> _records;
+  final _records = Map<int, HistoryResult>();
   Map<int, Profile> _profiles;
+  HistoryRange _range = HistoryRange.Week;
+  DateTime _date = DateTime.now();
   final _dateTimeFormat = dateTimeFormat();
+  final _pages = PageController(keepPage: false);
+  int _page = 0;
+  String statKey = 'time_total';
 
   _historyUpdated() {
     _load(context);
@@ -18,11 +24,11 @@ class HistoryPane extends MainPaneState {
 
   Future _load(BuildContext ctx) async {
     try {
-      final list = await widget.provider.records.history();
       final profiles = await widget.provider.profiles.all();
       setState(() {
+        _date = DateTime.now();
+        _records.clear();
         _profiles = Map.fromIterable(profiles, key: (el) => el.id);
-        _records = list;
       });
     } catch (e) {
       print('Load history error: $e');
@@ -51,11 +57,149 @@ class HistoryPane extends MainPaneState {
     widget.provider.recording.startImport();
   }
 
+  Future _loadPage(BuildContext ctx, int index) async {
+    try {
+      final data = await widget.provider.records.history(
+          widget.provider.profiles, _range, _date, index,
+          statKey: statKey);
+      setState(() {
+        _records[index] = data;
+      });
+    } catch (e) {
+      print('Error in history(): $e');
+    }
+  }
+
+  Widget _buildChart(BuildContext ctx, HistoryResult data) {
+    final textColor = charts.ColorUtil.fromDartColor(
+        Theme.of(ctx).primaryTextTheme.bodyText1.color);
+    double max = 0;
+    data.keyStats.values.forEach((el) {
+      if (el != null && el > max) max = el;
+    });
+    List<charts.TickSpec<num>> ticks;
+    if (max == 0) {
+      ticks = [charts.TickSpec(0, label: '0'), charts.TickSpec(100, label: '')];
+    } else {
+      final half = widget.provider.indicators.formatSimple(statKey, max / 2);
+      final full = widget.provider.indicators.formatSimple(statKey, max);
+      ticks = [
+        charts.TickSpec(0, label: ''),
+        charts.TickSpec(50, label: half),
+        charts.TickSpec(100, label: full),
+      ];
+    }
+    final vert = charts.NumericAxisSpec(
+      showAxisLine: false,
+      tickProviderSpec: charts.StaticNumericTickProviderSpec(ticks),
+      renderSpec: charts.SmallTickRendererSpec(
+          labelStyle: charts.TextStyleSpec(color: textColor)),
+    );
+    final hor = charts.AxisSpec<String>(
+      showAxisLine: false,
+      tickProviderSpec: charts.StaticOrdinalTickProviderSpec([]),
+      renderSpec: charts.SmallTickRendererSpec(
+          labelStyle: charts.TextStyleSpec(color: textColor)),
+    );
+    final dataSeries = charts.Series<MapEntry<int, double>, String>(
+        id: 'main',
+        data: data.keyStats.entries.toList(),
+        domainFn: (val, index) {
+          switch (_range) {
+            case HistoryRange.Week:
+              return '${val.key}';
+            case HistoryRange.Month:
+              return '${val.key}';
+            case HistoryRange.Year:
+              return '${val.key}';
+          }
+        },
+        colorFn: (val, index) => (val.value ?? 0) > 0
+            ? charts.MaterialPalette.green.shadeDefault
+            : charts.MaterialPalette.gray.shadeDefault,
+        measureFn: (val, index) {
+          return (val.value ?? 0) > 0 ? val.value / max * 100 : 5;
+        });
+    final graph = charts.BarChart(
+      [dataSeries],
+      animate: false,
+      defaultInteractions: false,
+      primaryMeasureAxis: vert,
+      domainAxis: hor,
+    );
+    return SizedBox(
+      child: graph,
+      height: 100,
+    );
+  }
+
+  Widget _buildPage(BuildContext ctx, int index) {
+    final data = _records[index];
+    if (_profiles == null) {
+      return Container();
+    }
+    if (data == null) {
+      _loadPage(ctx, index);
+      return Container();
+    }
+    final stats = ['time_total', 'loc_total_distance']
+        .map((e) => renderSensor(
+            ctx, 30, widget.provider.indicators, data.stats, e,
+            expand: false, withType: true, border: false))
+        .toList();
+    final colItems = <Widget>[];
+    colItems.add(_buildChart(ctx, data));
+    colItems.add(Wrap(
+      children: stats,
+      alignment: WrapAlignment.spaceBetween,
+      runAlignment: WrapAlignment.spaceBetween,
+    ));
+    final total = Padding(
+      padding: EdgeInsets.all(8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: colItems,
+      ),
+    );
+    final list = RefreshIndicator(
+        child: ListView.builder(
+            itemCount: data.records.length,
+            itemBuilder: (ctx, idx) => _buildItem(ctx, index, idx)),
+        onRefresh: () => _load(context));
+    return Column(
+      children: [total, Expanded(child: list)],
+    );
+  }
+
+  _onPageChange(int index) {
+    setState(() {
+      _page = index;
+    });
+  }
+
+  Widget _buildTitle(HistoryResult data) {
+    if (data == null) return Text('Loading...');
+    switch (_range) {
+      case HistoryRange.Week:
+        return Text('Week ${DateFormat.yMMMd().format(data.start)}');
+      case HistoryRange.Month:
+        return Text('Month ${DateFormat.yMMM().format(data.start)}');
+      case HistoryRange.Year:
+        return Text('Year ${DateFormat.y().format(data.start)}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final body = PageView.builder(
+      onPageChanged: _onPageChange,
+      reverse: true,
+      itemBuilder: _buildPage,
+      controller: _pages,
+    );
     return Scaffold(
       appBar: AppBar(
-        title: Text('History'),
+        title: _buildTitle(_records[_page]),
         actions: <Widget>[
           IconButton(
               icon: Icon(Icons.add), onPressed: () => _addRecord(context)),
@@ -65,28 +209,13 @@ class HistoryPane extends MainPaneState {
                   ["Import TCX..."], [() => _startImport(context)])),
         ],
       ),
-      body: RefreshIndicator(
-          child: ListView.builder(
-              itemCount: _records?.length ?? 0,
-              itemBuilder: (ctx, index) => _buildItem(ctx, index)),
-          onRefresh: () => _load(context)),
+      body: body,
       bottomNavigationBar: widget.bottomNavigationBar,
     );
   }
 
-  _deleteRecord(BuildContext ctx, Record record) async {
-    final yes = await yesNoDialog(ctx, 'Delete selected record?');
-    if (!yes) return;
-    try {
-      await widget.provider.records.deleteOne(record);
-      return _load(ctx);
-    } catch (e) {
-      print('Error deleting: $e');
-    }
-  }
-
-  Widget _buildItem(BuildContext ctx, int index) {
-    final item = _records[index];
+  Widget _buildItem(BuildContext ctx, int page, int index) {
+    final item = _records[page].records[index];
     final dateTime = _dateTimeFormat
         .format(DateTime.fromMillisecondsSinceEpoch(item.started));
     final theme = Theme.of(ctx).primaryTextTheme;
@@ -110,47 +239,61 @@ class HistoryPane extends MainPaneState {
         overflow: TextOverflow.ellipsis,
       )));
     }
+    final colItems = <Widget>[
+      Text(
+        item.smartTitle(),
+        style: theme.subtitle1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ];
+    colItems.add(Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: bottomRow,
+    ));
+    final meta = item.metaJson;
+    if (meta != null) {
+      final items = [
+        'time_total',
+        'loc_total_${profile.speedIndicator()}',
+        'loc_total_distance',
+        'sensor_hrm_total_avg',
+        'sensor_power_total_avg',
+      ]
+          .map((e) {
+            final value = item.metaJson[e];
+            if (value != null && value > 0) {
+              return renderSensor(ctx, 24, widget.provider.indicators, meta, e,
+                  expand: false, caption: false, border: false, withType: true);
+            }
+          })
+          .where((e) => e != null)
+          .take(3);
+      if (items.isNotEmpty) {
+        colItems.add(Wrap(
+          children: items.toList(),
+          alignment: WrapAlignment.spaceBetween,
+          runAlignment: WrapAlignment.spaceBetween,
+        ));
+      }
+    }
     final col = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          item.smartTitle(),
-          style: theme.subtitle1,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
-        ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: bottomRow,
-        )
-      ],
+      children: colItems,
     );
-    return ListTile(
+    return Card(
+        child: InkWell(
       onTap: () => _openRecord(ctx, item),
-      title: col,
-      trailing: dotsMenu(
-          ctx,
-          LinkedHashMap.fromIterables([
-            'TCX Export',
-            'Delete'
-          ], [
-            () => _exportRecord(ctx, item, 'tcx'),
-            () => _deleteRecord(ctx, item)
-          ])),
-    );
+      child: Padding(
+        padding: EdgeInsets.all(8.0),
+        child: col,
+      ),
+    ));
   }
 
   Future _openRecord(BuildContext ctx, Record item) async {
     await RecordDetailsPane.open(ctx, widget.provider, item);
     return _load(ctx);
-  }
-
-  _exportRecord(BuildContext ctx, Record record, String type) async {
-    try {
-      await widget.provider.recording.export(record.id, type);
-    } catch (e) {
-      print('Export error: $e');
-    }
   }
 }
 
@@ -450,6 +593,17 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     return Scaffold(
       appBar: AppBar(
         title: Text(item.smartTitle()),
+        actions: [
+          dotsMenu(
+              context,
+              LinkedHashMap.fromIterables([
+                'TCX Export',
+                'Delete'
+              ], [
+                () => _exportRecord(context, item, 'tcx'),
+                () => _deleteRecord(context, item)
+              ]))
+        ],
         bottom: appBarBottom,
       ),
       body: body,
@@ -458,6 +612,25 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         child: Icon(Icons.done),
       ),
     );
+  }
+
+  _deleteRecord(BuildContext ctx, Record record) async {
+    final yes = await yesNoDialog(ctx, 'Delete selected record?');
+    if (!yes) return;
+    try {
+      await widget.provider.records.deleteOne(record);
+      return Navigator.pop(ctx, true);
+    } catch (e) {
+      print('Error deleting: $e');
+    }
+  }
+
+  _exportRecord(BuildContext ctx, Record record, String type) async {
+    try {
+      await widget.provider.recording.export(record.id, type);
+    } catch (e) {
+      print('Export error: $e');
+    }
   }
 }
 
