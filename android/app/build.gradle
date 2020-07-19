@@ -59,11 +59,13 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField("String", "EXPORT_AUTHORITY", "\"org.fitrecord.android.export.debug\"")
             manifestPlaceholders = [exportAuthorities:"org.fitrecord.android.export.debug"]
         }
         release {
             applicationIdSuffix ".release"
             signingConfig signingConfigs.release
+            buildConfigField("String", "EXPORT_AUTHORITY", "\"org.fitrecord.android.export\"")
             manifestPlaceholders = [exportAuthorities:"org.fitrecord.android.export"]
         }
     }

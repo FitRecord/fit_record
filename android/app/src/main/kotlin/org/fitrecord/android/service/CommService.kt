@@ -13,6 +13,7 @@ import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.Result
+import org.fitrecord.android.BuildConfig
 import org.fitrecord.android.MainActivity
 import java.io.File
 import java.io.FileDescriptor
@@ -50,7 +51,7 @@ class CommService : ConnectableService() {
 
     private fun shareFile(activity: MainActivity, file: String?, type: String?): Boolean {
         try {
-            val uri = FileProvider.getUriForFile(activity, "org.fitrecord.android.export", File(file))
+            val uri = FileProvider.getUriForFile(activity, BuildConfig.EXPORT_AUTHORITY, File(file))
             val intent = ShareCompat.IntentBuilder.from(activity)
                     .setType(type)
                     .setStream(uri)
