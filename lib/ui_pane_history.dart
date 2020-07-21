@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:android/data_provider.dart';
 import 'package:android/data_storage.dart';
 import 'package:android/ui_main.dart';
+import 'package:android/ui_pane_activity.dart';
 import 'package:android/ui_utils.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
@@ -16,10 +17,19 @@ class HistoryPane extends MainPaneState {
   final _dateTimeFormat = dateTimeFormat();
   final _pages = PageController(keepPage: false);
   int _page = 0;
-  String statKey = 'time_total';
+  final _keys = [
+    'time_total',
+    'loc_total_distance',
+  ];
+  String _statKey = 'time_total';
+  bool configVisible = false;
 
   _historyUpdated() {
     _load(context);
+  }
+
+  _toggleConfigPanel() {
+    setState(() => configVisible = !configVisible);
   }
 
   Future _load(BuildContext ctx) async {
@@ -44,6 +54,14 @@ class HistoryPane extends MainPaneState {
   @override
   void initState() {
     super.initState();
+    _range = HistoryRange.values.firstWhere(
+        (r) =>
+            r.toString() ==
+            widget.provider.preferences.getString('history_range'),
+        orElse: () => _range);
+    _statKey = _keys.firstWhere(
+        (el) => el == widget.provider.preferences.getString('history_stat_key'),
+        orElse: () => _statKey);
     widget.provider.recording.historyNotifier.addListener(_historyUpdated);
     _load(context);
   }
@@ -61,7 +79,7 @@ class HistoryPane extends MainPaneState {
     try {
       final data = await widget.provider.records.history(
           widget.provider.profiles, _range, _date, index,
-          statKey: statKey);
+          statKey: _statKey);
       setState(() {
         _records[index] = data;
       });
@@ -81,8 +99,8 @@ class HistoryPane extends MainPaneState {
     if (max == 0) {
       ticks = [charts.TickSpec(0, label: '0'), charts.TickSpec(100, label: '')];
     } else {
-      final half = widget.provider.indicators.formatSimple(statKey, max / 2);
-      final full = widget.provider.indicators.formatSimple(statKey, max);
+      final half = widget.provider.indicators.formatSimple(_statKey, max / 2);
+      final full = widget.provider.indicators.formatSimple(_statKey, max);
       ticks = [
         charts.TickSpec(0, label: ''),
         charts.TickSpec(50, label: half),
@@ -105,14 +123,7 @@ class HistoryPane extends MainPaneState {
         id: 'main',
         data: data.keyStats.entries.toList(),
         domainFn: (val, index) {
-          switch (_range) {
-            case HistoryRange.Week:
-              return '${val.key}';
-            case HistoryRange.Month:
-              return '${val.key}';
-            case HistoryRange.Year:
-              return '${val.key}';
-          }
+          return val.toString();
         },
         colorFn: (val, index) => (val.value ?? 0) > 0
             ? charts.MaterialPalette.green.shadeDefault
@@ -142,9 +153,9 @@ class HistoryPane extends MainPaneState {
       _loadPage(ctx, index);
       return Container();
     }
-    final stats = ['time_total', 'loc_total_distance']
+    final stats = _keys
         .map((e) => renderSensor(
-            ctx, 30, widget.provider.indicators, data.stats, e,
+            ctx, 26, widget.provider.indicators, data.stats, e,
             expand: false, withType: true, border: false))
         .toList();
     final colItems = <Widget>[];
@@ -177,6 +188,74 @@ class HistoryPane extends MainPaneState {
     });
   }
 
+  Widget _buildConfigPanel(BuildContext ctx) {
+    final textStyle = Theme.of(ctx).textTheme.button;
+    Widget _buildGrid(Map<String, Widget> data) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: data.entries
+            .map((row) => Row(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Expanded(
+                        child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text(
+                        row.key,
+                        style: textStyle,
+                      ),
+                    )),
+                    Padding(
+                      padding: EdgeInsets.only(right: 8.0),
+                      child: row.value,
+                    ),
+                  ],
+                ))
+            .toList(),
+      );
+    }
+
+    return _buildGrid(LinkedHashMap.fromIterables([
+      'Range:',
+      'Metric:',
+    ], <Widget>[
+      RaisedButton(
+        color: Colors.blue,
+        child: Text(_rangeTitle(_range)),
+        onPressed: () => _changeRange(ctx),
+      ),
+      RaisedButton(
+        color: Colors.blue,
+        child: Text(_keyTitle(_statKey)),
+        onPressed: () => _changeKey(ctx),
+      ),
+    ]));
+  }
+
+  T _nextArrayValue<T>(List<T> data, T value) {
+    return data[(data.indexOf(value) + 1) % data.length];
+  }
+
+  _changeRange(BuildContext ctx) {
+    final range = _nextArrayValue(HistoryRange.values, _range);
+    widget.provider.preferences.setString('history_range', range.toString());
+    _range = range;
+    _records.clear();
+    setState(() {
+      _pages.jumpToPage(0);
+    });
+  }
+
+  _changeKey(BuildContext ctx) {
+    final key = _nextArrayValue(_keys, _statKey);
+    widget.provider.preferences.setString('history_stat_key', key);
+    _statKey = key;
+    _records.clear();
+    _loadPage(ctx, _page);
+  }
+
   Widget _buildTitle(HistoryResult data) {
     if (data == null) return Text('Loading...');
     switch (_range) {
@@ -191,22 +270,34 @@ class HistoryPane extends MainPaneState {
 
   @override
   Widget build(BuildContext context) {
-    final body = PageView.builder(
+    Widget body = PageView.builder(
       onPageChanged: _onPageChange,
       reverse: true,
       itemBuilder: _buildPage,
       controller: _pages,
     );
+    if (configVisible) {
+      body = Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [_buildConfigPanel(context), Expanded(child: body)],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: _buildTitle(_records[_page]),
         actions: <Widget>[
           IconButton(
-              icon: Icon(Icons.add), onPressed: () => _addRecord(context)),
+              icon: Icon(Icons.tune), onPressed: () => _toggleConfigPanel()),
           dotsMenu(
               context,
-              HashMap.fromIterables(
-                  ["Import TCX..."], [() => _startImport(context)])),
+              HashMap.fromIterables([
+                "Add activity",
+                "Import TCX...",
+              ], [
+                () => _addRecord(context),
+                () => _startImport(context),
+              ])),
         ],
       ),
       body: body,
@@ -263,7 +354,7 @@ class HistoryPane extends MainPaneState {
           .map((e) {
             final value = item.metaJson[e];
             if (value != null && value > 0) {
-              return renderSensor(ctx, 24, widget.provider.indicators, meta, e,
+              return renderSensor(ctx, 20, widget.provider.indicators, meta, e,
                   expand: false, caption: false, border: false, withType: true);
             }
           })
@@ -292,344 +383,27 @@ class HistoryPane extends MainPaneState {
   }
 
   Future _openRecord(BuildContext ctx, Record item) async {
-    await RecordDetailsPane.open(ctx, widget.provider, item);
+    await RecordDetailsPane.open(ctx, widget.provider, item.id);
     return _load(ctx);
   }
-}
 
-class RecordDetailsPane extends StatefulWidget {
-  final DataProvider provider;
-  final Record record;
-
-  const RecordDetailsPane(this.provider, this.record);
-
-  @override
-  State<StatefulWidget> createState() => _RecordDetailsState();
-
-  static Future open(
-      BuildContext ctx, DataProvider provider, Record record) async {
-    return Navigator.push(
-        ctx,
-        MaterialPageRoute(
-            builder: (ctx) => RecordDetailsPane(provider, record)));
-  }
-}
-
-class _RecordDetailsState extends State<RecordDetailsPane>
-    with SingleTickerProviderStateMixin {
-  Record _record;
-  Profile _profile;
-  final titleEditor = TextEditingController();
-  final descritptionEditor = TextEditingController();
-  TabController lapTabs;
-
-  int _lapsCount(Record record) => (record?.laps?.length ?? 0) + 1;
-
-  Future _load(BuildContext ctx) async {
-    try {
-      final item = await widget.provider.records
-          .loadOne(widget.provider.indicators, widget.record.id);
-      final profile = await widget.provider.profiles.one(item.profileID);
-      setState(() {
-        _record = item;
-        _profile = profile;
-        titleEditor.text = item.title ?? '';
-        descritptionEditor.text = item.description ?? '';
-        lapTabs = TabController(length: _lapsCount(item) + 1, vsync: this);
-      });
-    } catch (e) {
-      print('Error loading record: $e');
-      showMessage(ctx, 'Something is not good');
+  String _rangeTitle(HistoryRange range) {
+    switch (range) {
+      case HistoryRange.Week:
+        return 'Week';
+      case HistoryRange.Month:
+        return 'Month';
+      case HistoryRange.Year:
+        return 'Year';
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _load(context);
-  }
-
-  Widget _buildEditForm(BuildContext ctx, Record record) {
-    return Padding(
-        padding: EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: titleEditor,
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: 1,
-              decoration: InputDecoration(labelText: 'Title:'),
-            ),
-            TextFormField(
-              controller: descritptionEditor,
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: null,
-              decoration: InputDecoration(labelText: 'Description:'),
-            ),
-          ],
-        ));
-  }
-
-  Future _saveForm(BuildContext ctx, Record item) async {
-    item.title = textFromCtrl(titleEditor);
-    item.description = textFromCtrl(descritptionEditor);
-    try {
-      await widget.provider.records.updateFields(item);
-      Navigator.pop(ctx, true);
-    } catch (e) {
-      print('Failed to update: $e');
-      showMessage(ctx, 'Something is not good');
-    }
-  }
-
-  ChartSeries _altitudeSeries(BuildContext ctx, Map<int, double> data) {
-    return chartsMake(
-        ctx,
-        data,
-        'altitude',
-        charts.MaterialPalette.gray.shadeDefault,
-        widget.provider.indicators.indicators['loc_altitude'],
-        renderer: 'altitude',
-        smoothFactor: 80,
-        axisID: 'secondaryMeasureAxisId');
-  }
-
-  ChartSeries _hrmSeries(BuildContext ctx, Map<int, double> data,
-      {double average}) {
-    return chartsMake(
-      ctx,
-      data,
-      'hrm',
-      charts.MaterialPalette.red.shadeDefault,
-      widget.provider.indicators.indicators['sensor_hrm'],
-      average: average,
-    );
-  }
-
-  ChartSeries _cadenceSeries(BuildContext ctx, Map<int, double> data,
-      {double average}) {
-    return chartsMake(
-      ctx,
-      data,
-      'cadence',
-      charts.MaterialPalette.pink.shadeDefault,
-      widget.provider.indicators.indicators['sensor_cadence'],
-      average: average,
-    );
-  }
-
-  ChartSeries _powerSeries(BuildContext ctx, Map<int, double> data,
-      {bool extended = false}) {
-    return chartsMake(
-      ctx,
-      data,
-      'power',
-      charts.MaterialPalette.yellow.shadeDefault,
-      widget.provider.indicators.indicators['sensor_power'],
-    );
-  }
-
-  ChartSeries _paceSpeedSeries(
-      BuildContext ctx, String indicator, Map<int, double> data, bool invert,
-      {double average}) {
-    return chartsMake(
-      ctx,
-      data,
-      'pace/speed',
-      charts.MaterialPalette.blue.shadeDefault,
-      widget.provider.indicators.indicators[indicator],
-      smoothFactor: 120,
-      average: average,
-      invert: invert,
-    );
-  }
-
-  Widget _buildOverview(BuildContext ctx, Record item, int from, int to) {
-    final scope = to != null ? 'lap' : 'total';
-    final page = _profile.defaultScreen(scope, true);
-    final indicator = _profile.speedIndicator();
-    final altitude =
-        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
-    final row = to != null ? item.trackpoints[to] : item.trackpoints.last;
-    final sensors =
-        renderSensors(ctx, widget.provider.indicators, row, page, 'Overview:');
-    final pace = _paceSpeedSeries(ctx, _profile.speedIndicator(),
-        item.extractData(_profile.speedIndicator(), from, to), true,
-        average: row['loc_${scope}_${indicator}']);
-    final paceChart = chartsMakeChart(ctx, [altitude, pace], pace?.axisSpec);
-    return columnMaybe([sensors, paceChart]);
-  }
-
-  Widget _buildHrm(BuildContext ctx, Record item, int from, int to) {
-    final scope = to != null ? 'lap' : 'total';
-    final page = [
-      [
-        {'id': 'sensor_hrm_${scope}_avg'},
-      ],
-      [
-        {'id': 'sensor_hrm_${scope}_min'},
-        {'id': 'sensor_hrm_${scope}_max'},
-      ]
-    ];
-    final row = to != null ? item.trackpoints[to] : item.trackpoints.last;
-    final sensors = renderSensors(
-        ctx, widget.provider.indicators, row, page, 'Heart rate:');
-    final altitude =
-        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
-    final hrm = _hrmSeries(ctx, item.extractData('sensor_hrm', from, to),
-        average: row['sensor_hrm_${scope}_avg']);
-    final chart = chartsMakeChart(ctx, [altitude, hrm], hrm?.axisSpec);
-    return columnMaybe([sensors, chart]);
-  }
-
-  Widget _buildPower(BuildContext ctx, Record item, int from, int to) {
-    final scope = to != null ? 'lap' : 'total';
-    final page = [
-      [
-        {'id': 'sensor_power_${scope}_avg'},
-      ],
-      [
-        {'id': 'sensor_power_${scope}_min'},
-        {'id': 'sensor_power_${scope}_max'},
-      ]
-    ];
-    final altitude =
-        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
-    final power = _powerSeries(ctx, item.extractData('sensor_power', from, to));
-    final chart = chartsMakeChart(ctx, [altitude, power], power?.axisSpec);
-    final sensors = renderSensors(
-        ctx,
-        widget.provider.indicators,
-        to != null ? item.trackpoints[to] : item.trackpoints.last,
-        page,
-        'Power:');
-    return columnMaybe([sensors, chart]);
-  }
-
-  Widget _buildCadence(BuildContext ctx, Record item, int from, int to) {
-    final scope = to != null ? 'lap' : 'total';
-    final page = [
-      [
-        {'id': 'sensor_cadence_${scope}_avg'},
-      ],
-      [
-        {'id': 'sensor_cadence_${scope}_min'},
-        {'id': 'sensor_cadence_${scope}_max'},
-      ]
-    ];
-    final altitude =
-        _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
-    final cadence =
-        _cadenceSeries(ctx, item.extractData('sensor_cadence', from, to));
-    final chart = chartsMakeChart(ctx, [altitude, cadence], cadence?.axisSpec);
-    final sensors = renderSensors(
-        ctx,
-        widget.provider.indicators,
-        to != null ? item.trackpoints[to] : item.trackpoints.last,
-        page,
-        'Cadence:');
-    return columnMaybe([sensors, chart]);
-  }
-
-  Widget _buildTab(BuildContext ctx, int index, Record record) {
-    final listItems = <Widget>[];
-    int endIndex;
-    int startIndex = 0;
-    if (index == null) {
-      startIndex = 0;
-      listItems.add(_buildEditForm(context, record));
-      listItems.add(_buildOverview(context, record, 0, null));
-    } else {
-      startIndex = index > 0 ? record.laps[index - 1] + 1 : 0;
-      endIndex = index < record.laps.length
-          ? record.laps[index]
-          : record.trackpoints.length - 1;
-      listItems.add(_buildOverview(context, record, startIndex, endIndex));
-    }
-    if (record.trackpoints.last.containsKey('sensor_hrm')) {
-      listItems.add(_buildHrm(ctx, record, startIndex, endIndex));
-    }
-    if (record.trackpoints.last.containsKey('sensor_power')) {
-      listItems.add(_buildPower(ctx, record, startIndex, endIndex));
-    }
-    if (record.trackpoints.last.containsKey('sensor_cadence')) {
-      listItems.add(_buildCadence(ctx, record, startIndex, endIndex));
-    }
-    return ListView(
-      children: listItems,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final item = _record ?? widget.record;
-    Widget appBarBottom;
-    Widget body = Container();
-    if (item.trackpoints?.isNotEmpty == true) {
-      print('Laps: ${_lapsCount(item)}');
-      final lapCount = _lapsCount(item);
-      if (lapCount > 1) {
-        // Render lap info
-        final indexes = List.generate(lapCount, (index) => index);
-        final tabs = [Tab(text: 'Overview')];
-        tabs.addAll(indexes.map((index) => Tab(text: 'Lap ${index + 1}')));
-        appBarBottom = TabBar(
-          tabs: tabs,
-          controller: lapTabs,
-        );
-        final tabViews = [_buildTab(context, null, item)];
-        tabViews
-            .addAll(indexes.map((index) => _buildTab(context, index, item)));
-        body = TabBarView(
-          controller: lapTabs,
-          children: tabViews,
-        );
-      } else {
-        body = _buildTab(context, null, item);
-      }
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(item.smartTitle()),
-        actions: [
-          dotsMenu(
-              context,
-              LinkedHashMap.fromIterables([
-                'TCX Export',
-                'Delete'
-              ], [
-                () => _exportRecord(context, item, 'tcx'),
-                () => _deleteRecord(context, item)
-              ]))
-        ],
-        bottom: appBarBottom,
-      ),
-      body: body,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _saveForm(context, item),
-        child: Icon(Icons.done),
-      ),
-    );
-  }
-
-  _deleteRecord(BuildContext ctx, Record record) async {
-    final yes = await yesNoDialog(ctx, 'Delete selected record?');
-    if (!yes) return;
-    try {
-      await widget.provider.records.deleteOne(record);
-      return Navigator.pop(ctx, true);
-    } catch (e) {
-      print('Error deleting: $e');
-    }
-  }
-
-  _exportRecord(BuildContext ctx, Record record, String type) async {
-    try {
-      await widget.provider.recording.export(record.id, type);
-    } catch (e) {
-      print('Export error: $e');
+  String _keyTitle(String statKey) {
+    switch (statKey) {
+      case 'loc_total_distance':
+        return 'Total distance';
+      case 'time_total':
+        return 'Total duration';
     }
   }
 }
@@ -725,6 +499,38 @@ class _RecordEditorState extends State<_RecordEditor> {
       final items = <Widget>[
         dropDown,
         TextFormField(
+          controller: _duration,
+          style: sensorTextStyle(context, 20),
+          maxLines: 1,
+          decoration: InputDecoration(labelText: 'Duration:'),
+          validator: (value) => _validateDuration(value),
+        ),
+        TextFormField(
+          controller: _distance,
+          style: sensorTextStyle(context, 20),
+          maxLines: 1,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          decoration: InputDecoration(labelText: 'Distance (in km):'),
+          validator: (value) => _validateDistance(value),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+                child: Text(
+              '${dateTimeFormat().format(_dateTime)}',
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.button,
+            )),
+            IconButton(
+                icon: Icon(Icons.calendar_today),
+                onPressed: () => _selectDate(context)),
+            IconButton(
+                icon: Icon(Icons.access_time),
+                onPressed: () => _selectTime(context))
+          ],
+        ),
+        TextFormField(
           controller: _title,
           textCapitalization: TextCapitalization.sentences,
           maxLines: 1,
@@ -736,40 +542,12 @@ class _RecordEditorState extends State<_RecordEditor> {
           maxLines: null,
           decoration: InputDecoration(labelText: 'Description:'),
         ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-                child: Text(
-              '${dateTimeFormat().format(_dateTime)}',
-              style: Theme.of(context).primaryTextTheme.bodyText1,
-            )),
-            IconButton(
-                icon: Icon(Icons.calendar_today),
-                onPressed: () => _selectDate(context)),
-            IconButton(
-                icon: Icon(Icons.access_time),
-                onPressed: () => _selectTime(context))
-          ],
-        ),
-        TextFormField(
-          controller: _duration,
-          maxLines: 1,
-          decoration: InputDecoration(labelText: 'Duration:'),
-          validator: (value) => _validateDuration(value),
-        ),
-        TextFormField(
-          controller: _distance,
-          maxLines: 1,
-          keyboardType: TextInputType.numberWithOptions(decimal: false),
-          decoration: InputDecoration(labelText: 'Distance (in km):'),
-          validator: (value) => _validateDistance(value),
-        ),
       ];
       body = Form(
           key: _formID,
           autovalidate: false,
           child: ListView(
+            padding: EdgeInsets.only(bottom: 80.0),
             children: items
                 .where((el) => el != null)
                 .map((e) => Padding(

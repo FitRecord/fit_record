@@ -459,11 +459,10 @@ class RecordStorage extends DatabaseStorage {
     return result;
   }
 
-  Future deleteOne(Record record) async {
+  Future deleteOne(int id) async {
     return openSession((t) async {
-      await t.delete('"trackpoints"',
-          where: '"record_id"=?', whereArgs: [record.id]);
-      return t.delete('"records"', where: '"id"=?', whereArgs: [record.id]);
+      await t.delete('"trackpoints"', where: '"record_id"=?', whereArgs: [id]);
+      return t.delete('"records"', where: '"id"=?', whereArgs: [id]);
     });
   }
 

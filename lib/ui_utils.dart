@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:android/data_sensor.dart';
 import 'package:android/data_storage.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
@@ -109,6 +107,12 @@ Widget renderSensors(BuildContext ctx, SensorIndicatorManager sensors,
   return column;
 }
 
+TextStyle sensorTextStyle(BuildContext ctx, double textSize) =>
+    Theme.of(ctx).textTheme.bodyText2.copyWith(
+        fontSize: textSize,
+        fontFamily: 'monospace',
+        fontWeight: FontWeight.bold);
+
 Widget renderSensor(BuildContext ctx, double textSize,
     SensorIndicatorManager manager, Map<String, dynamic> data, String id,
     {bool expand = true,
@@ -117,8 +121,7 @@ Widget renderSensor(BuildContext ctx, double textSize,
     bool withType = false}) {
   final sensor = manager.indicators[id];
   final theme = Theme.of(ctx);
-  final textTheme = theme.textTheme.bodyText2.copyWith(
-      fontSize: textSize, fontFamily: 'monospace', fontWeight: FontWeight.bold);
+  final textTheme = sensorTextStyle(ctx, textSize);
   final mainText = Text(
     sensor?.format(data[id] ?? 0, data) ?? '?',
     softWrap: false,
@@ -190,54 +193,131 @@ class ChartSeries {
   ChartSeries(this.series, this.axisSpec, this.behavior);
 }
 
+List<MapEntry<int, double>> _simplifyDouglasPeucker(
+    List<MapEntry<int, double>> points, double t) {
+  if (points.length <= 1) return points;
+  final sqt = t * t;
+  final result = [points.first];
+  double _sqDist(MapEntry<int, double> p, MapEntry<int, double> p1,
+      MapEntry<int, double> p2) {
+    var x = p1.key.toDouble(),
+        y = p1.value,
+        dx = p2.key.toDouble() - x,
+        dy = p2.value - y;
+    if (dx != 0 || dy != 0) {
+      final t = ((p.key.toDouble() - x) * dx + (p.value - y) * dy) /
+          (dx * dx + dy * dy);
+      if (t > 1) {
+        x = p2.key.toDouble();
+        y = p2.value;
+      } else if (t > 0) {
+        x += dx * t;
+        y += dy * t;
+      }
+    }
+    dx = p.key.toDouble() - x;
+    dy = p.value - y;
+    return dx * dx + dy * dy;
+  }
+
+  _step(int first, int last) {
+    var max = sqt;
+    int index;
+    for (var i = first + 1; i < last; i++) {
+      final sqd = _sqDist(points[i], points[first], points[last]);
+      if (sqd > max) {
+        index = i;
+        max = sqd;
+      }
+    }
+    if (max > sqt) {
+      if (index - first > 1) _step(first, index);
+      result.add(points[index]);
+      if (last - index > 1) _step(index, last);
+    }
+  }
+
+  _step(0, points.length - 1);
+
+  result.add(points.last);
+  return result;
+}
+
+List<MapEntry<int, double>> _simplifyRadial(
+    List<MapEntry<int, double>> points, double t) {
+  double _sqDist(MapEntry<int, double> p1, MapEntry<int, double> p2) {
+    final dx = (p1.key - p2.key).toDouble();
+    final dy = p1.value - p2.value;
+    return dx * dx + dy * dy;
+  }
+
+  if (points.length <= 1) return points;
+  final sqt = t * t;
+  var prev = points.first;
+  final result = [prev];
+  MapEntry<int, double> point;
+  for (var i = 1; i < points.length; i++) {
+    point = points[i];
+    if (_sqDist(point, prev) > sqt) {
+      result.add(point);
+      prev = point;
+    }
+  }
+  if (prev != point) result.add(point);
+  return result;
+}
+
+List<MapEntry<int, double>> _simplify(
+    List<MapEntry<int, double>> points, maxPoints) {
+  var result = points;
+  double t = 1;
+  while (result.length > maxPoints) {
+    result = _simplifyRadial(result, t);
+    result = _simplifyDouglasPeucker(result, t);
+    t += 2;
+  }
+  return result;
+}
+
+List<MapEntry<int, double>> _smooth(
+    List<MapEntry<int, double>> points, int items) {
+  return List.generate(points.length, (index) {
+    if (items == 0) return points[index];
+    final indexes = [
+      for (var i = index - items; i <= index + items; i++)
+        i >= 0 && i < points.length ? points[i].value : null
+    ].where((v) => v != null);
+    if (indexes.length < 2) return points[index];
+    final sum = indexes.reduce((value, element) => value + element);
+    return MapEntry(points[index].key, sum / indexes.length.toDouble());
+  });
+}
+
 ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
     charts.Color color, IndicatorValue indicator,
     {String renderer,
     String axisID,
-    int smoothFactor = 300,
+    int smooth = 10,
     double average,
     bool invert = false}) {
   if (data == null || data.length < 3) return null;
+
   final textColor = charts.ColorUtil.fromDartColor(
       Theme.of(ctx).primaryTextTheme.bodyText1.color);
 
-  final entries = data.entries.toList();
-
-  final smooth = entries.length > smoothFactor
-      ? (entries.length / smoothFactor).ceil()
-      : 0;
-
-  final smoothValue = (int index) {
-    if (smooth == 0) return entries[index].value;
-
-    int start = index - smooth;
-    int end = index + smooth;
-    if (start < 0) {
-      start = 0;
-      end = 2 * smooth;
-    }
-    if (end > entries.length) {
-      end = entries.length;
-      start = end - 2 * smooth;
-    }
-    final indexes = [for (var i = max(0, start); i < end; i++) entries[i].value]
-        .where((v) => v != null);
-    if (indexes.length < 2) return entries[index].value;
-    final sum = indexes.reduce((value, element) => value + element);
-    return sum / indexes.length;
-  };
+  var entries = _smooth(data.entries.toList(), smooth)
+      .where((el) => el.value != null)
+      .toList();
 
   List<double> minMaxAvg() {
     double _min, _max, _avg = 0;
-    final list = List.generate(entries.length, (index) => smoothValue(index))
-        .where((v) => v != null);
-    list.forEach((val) {
-      if (_min == null || _min > val) _min = val;
-      if (_max == null || _max < val) _max = val;
-      _avg += val;
+    entries.forEach((val) {
+      if (_min == null || _min > val.value) _min = val.value;
+      if (_max == null || _max < val.value) _max = val.value;
+      _avg += val.value;
     });
-    if (list.isEmpty) return [0, 0, 0];
-    return [_min, _max, _avg / list.length];
+    if (entries.isEmpty) return [0, 0, 0];
+    return [_min, _max, _avg / entries.length];
   }
 
   final stat = minMaxAvg();
@@ -249,6 +329,13 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
   } else {
     mul = 100 / (stat[1] - stat[0]);
   }
+  entries = entries.map((e) {
+    final v = e.value;
+    final val = (v - minus) * mul;
+    return MapEntry(e.key, invert ? 100 - val : val);
+  }).toList();
+  entries = _simplify(entries, 300);
+
   charts.RangeAnnotation averageAnn;
   if (average != null) {
     final val = (average - minus) * mul;
@@ -265,12 +352,7 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
       id: id,
       colorFn: (entry, index) => color,
       domainFn: (entry, index) => entry.key,
-      measureFn: (entry, index) {
-        final v = smoothValue(index);
-        if (v == null) return null;
-        final val = (v - minus) * mul;
-        return invert ? 100 - val : val;
-      },
+      measureFn: (entry, index) => entry.value,
       data: entries);
   if (renderer != null) series.setAttribute(charts.rendererIdKey, renderer);
   if (axisID != null) series.setAttribute(charts.measureAxisIdKey, axisID);
@@ -312,7 +394,7 @@ chartsTimeAxis() => charts.NumericAxisSpec(
     }),
     tickProviderSpec: charts.NumericEndPointsTickProviderSpec());
 
-int _secondsStep(int duration) {
+int secondsStep(int duration) {
   if (duration < 60) return 20;
   if (duration < 120) return 30;
   if (duration < 60 * 5) return 60;
@@ -329,27 +411,19 @@ int _secondsStep(int duration) {
   return (duration / 3).floor();
 }
 
-Widget chartsMakeChart(
-    BuildContext ctx, List<ChartSeries> data, charts.AxisSpec primary) {
-  final axis =
-      data.where((element) => element != null).map((e) => e.series).toList();
-  if (axis.isEmpty || axis.last == data.first?.series) {
-    return null;
-  }
-  final annotations = data
+Widget chartsMakeChart(BuildContext ctx, ChartSeries primary,
+    ChartSeries secondary, List<charts.TickSpec> ticks) {
+  if (primary == null) return null;
+  final axis = [primary, secondary]
+      .where((element) => element != null)
+      .map((e) => e.series)
+      .toList();
+  final annotations = [primary, secondary]
       .where((el) => el?.behavior != null)
       .fold(<charts.RangeAnnotation>[], (prev, el) {
     prev.addAll(el.behavior.where((el) => el != null));
     return prev;
   });
-  final totalTime = axis.first.data.last.key;
-  final timeStep = _secondsStep(totalTime);
-  final timeTicks = [
-    for (var i = 0; i < totalTime - timeStep; i += timeStep)
-      charts.TickSpec(i, label: formatDurationSeconds(i))
-  ];
-  timeTicks
-      .add(charts.TickSpec(totalTime, label: formatDurationSeconds(totalTime)));
   final textColor = charts.ColorUtil.fromDartColor(
       Theme.of(ctx).primaryTextTheme.bodyText1.color);
   final chart = charts.LineChart(
@@ -362,12 +436,12 @@ Widget chartsMakeChart(
         renderSpec: charts.SmallTickRendererSpec(
             labelOffsetFromAxisPx: 10,
             labelStyle: charts.TextStyleSpec(color: textColor)),
-        tickProviderSpec: charts.StaticNumericTickProviderSpec(timeTicks)),
+        tickProviderSpec: charts.StaticNumericTickProviderSpec(ticks)),
     customSeriesRenderers: [
       chartsAltitudeRenderer(),
     ],
-    primaryMeasureAxis: primary,
-    secondaryMeasureAxis: data.first?.axisSpec,
+    primaryMeasureAxis: primary.axisSpec,
+    secondaryMeasureAxis: secondary?.axisSpec,
   );
   return SizedBox(
     child: Card(

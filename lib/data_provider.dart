@@ -7,6 +7,7 @@ import 'package:android/data_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Sensor {
   final String id, name;
@@ -112,13 +113,14 @@ class DataProvider {
   final RecordStorage records;
   final SensorIndicatorManager indicators;
   final RecordingController recording;
+  final SharedPreferences preferences;
   final ExportManager export = ExportManager();
 
   final DbWrapperChannel profilesWrapper;
   final DbWrapperChannel recordsWrapper;
 
   DataProvider(this.profiles, this.records, this.indicators, this.recording,
-      [this.profilesWrapper, this.recordsWrapper]);
+      [this.profilesWrapper, this.recordsWrapper, this.preferences]);
 
   static backgroundCallback() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -186,8 +188,9 @@ class DataProvider {
     final recordsWrapper = ChannelDbDelegate('org.fitrecord/proxy/records');
     final profiles = new ProfileStorage(profilesWrapper);
     final records = new RecordStorage(recordsWrapper);
+    final preferences = await SharedPreferences.getInstance();
     return new DataProvider(profiles, records, new SensorIndicatorManager(),
-        new RecordingController());
+        new RecordingController(), null, null, preferences);
   }
 
   static Future<DataProvider> openProvider(Function() callback) async {
