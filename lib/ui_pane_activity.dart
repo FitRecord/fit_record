@@ -161,7 +161,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         charts.MaterialPalette.gray.shadeDefault,
         widget.provider.indicators.indicators['loc_altitude'],
         renderer: 'altitude',
-        smooth: 20,
+        smooth: 30,
         axisID: 'secondaryMeasureAxisId');
   }
 
@@ -210,7 +210,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       'pace/speed',
       charts.MaterialPalette.blue.shadeDefault,
       widget.provider.indicators.indicators[indicator],
-      smooth: 30,
+      smooth: 20,
       average: average,
       invert: invert,
     );
@@ -221,7 +221,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     final sensors = renderSensors(
         ctx, widget.provider.indicators, tab._row, page, 'Overview:');
     final paceChart =
-        chartsMakeChart(ctx, tab._pace, tab._altitude, tab._ticks);
+        chartsMakeChart(ctx, [tab._pace, tab._altitude], tab._ticks);
     return columnMaybe([sensors, paceChart]);
   }
 
@@ -238,7 +238,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     ];
     final sensors = renderSensors(
         ctx, widget.provider.indicators, tab._row, page, 'Heart rate:');
-    final chart = chartsMakeChart(ctx, tab._hrm, tab._altitude, tab._ticks);
+    final chart = chartsMakeChart(ctx, [tab._hrm, tab._altitude], tab._ticks);
     return columnMaybe([sensors, chart]);
   }
 
@@ -253,7 +253,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         {'id': 'sensor_power_${scope}_max'},
       ]
     ];
-    final chart = chartsMakeChart(ctx, tab._power, tab._altitude, tab._ticks);
+    final chart = chartsMakeChart(ctx, [tab._power, tab._altitude], tab._ticks);
     final sensors = renderSensors(
         ctx, widget.provider.indicators, tab._row, page, 'Power:');
     return columnMaybe([sensors, chart]);
@@ -270,7 +270,8 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         {'id': 'sensor_cadence_${scope}_max'},
       ]
     ];
-    final chart = chartsMakeChart(ctx, tab._cadence, tab._altitude, tab._ticks);
+    final chart =
+        chartsMakeChart(ctx, [tab._cadence, tab._altitude], tab._ticks);
     final sensors = renderSensors(
         ctx, widget.provider.indicators, tab._row, page, 'Cadence:');
     return columnMaybe([sensors, chart]);

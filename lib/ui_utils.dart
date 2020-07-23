@@ -272,7 +272,6 @@ List<MapEntry<int, double>> _simplify(
   var result = points;
   double t = 1;
   while (result.length > maxPoints) {
-    result = _simplifyRadial(result, t);
     result = _simplifyDouglasPeucker(result, t);
     t += 2;
   }
@@ -334,7 +333,7 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
     final val = (v - minus) * mul;
     return MapEntry(e.key, invert ? 100 - val : val);
   }).toList();
-  entries = _simplify(entries, 300);
+  entries = _simplify(entries, 200);
 
   charts.RangeAnnotation averageAnn;
   if (average != null) {
@@ -342,10 +341,7 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
     averageAnn = charts.RangeAnnotation([
       charts.LineAnnotationSegment(
           invert ? 100 - val : val, charts.RangeAnnotationAxisType.measure,
-          labelStyleSpec: charts.TextStyleSpec(color: textColor),
-          strokeWidthPx: 1,
-          endLabel: indicator.format(average, null),
-          color: color)
+          strokeWidthPx: 1, color: color)
     ]);
   }
   final series = charts.Series<MapEntry<int, double>, int>(
@@ -411,14 +407,12 @@ int secondsStep(int duration) {
   return (duration / 3).floor();
 }
 
-Widget chartsMakeChart(BuildContext ctx, ChartSeries primary,
-    ChartSeries secondary, List<charts.TickSpec> ticks) {
-  if (primary == null) return null;
-  final axis = [primary, secondary]
-      .where((element) => element != null)
-      .map((e) => e.series)
-      .toList();
-  final annotations = [primary, secondary]
+Widget chartsMakeChart(
+    BuildContext ctx, List<ChartSeries> series, List<charts.TickSpec> ticks) {
+  final axis =
+      series.where((element) => element != null).map((e) => e.series).toList();
+  if (axis.isEmpty || series.first == null) return null;
+  final annotations = series
       .where((el) => el?.behavior != null)
       .fold(<charts.RangeAnnotation>[], (prev, el) {
     prev.addAll(el.behavior.where((el) => el != null));
@@ -440,8 +434,8 @@ Widget chartsMakeChart(BuildContext ctx, ChartSeries primary,
     customSeriesRenderers: [
       chartsAltitudeRenderer(),
     ],
-    primaryMeasureAxis: primary.axisSpec,
-    secondaryMeasureAxis: secondary?.axisSpec,
+    primaryMeasureAxis: series.first.axisSpec,
+    secondaryMeasureAxis: series.last?.axisSpec,
   );
   return SizedBox(
     child: Card(
