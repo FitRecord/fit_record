@@ -78,7 +78,8 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       return _TabInfo(lap, row, altitude, pace, hrm, power, cadence, timeTicks);
     }
 
-    result.add(_buildOne(0, 0, null));
+    final total = _buildOne(0, 0, null);
+    result.add(total);
     final lapCount = _lapsCount(item);
     if (lapCount > 1) {
       // Render lap info
@@ -162,6 +163,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         widget.provider.indicators.indicators['loc_altitude'],
         renderer: 'altitude',
         smooth: 30,
+        zoom: 100,
         axisID: 'secondaryMeasureAxisId');
   }
 

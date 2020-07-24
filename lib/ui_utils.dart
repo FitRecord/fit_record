@@ -297,6 +297,7 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
     {String renderer,
     String axisID,
     int smooth = 10,
+    double zoom,
     double average,
     bool invert = false}) {
   if (data == null || data.length < 3) return null;
@@ -315,19 +316,14 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
       if (_max == null || _max < val.value) _max = val.value;
       _avg += val.value;
     });
-    if (entries.isEmpty) return [0, 0, 0];
-    return [_min, _max, _avg / entries.length];
+    if (zoom != null && _max - _min < zoom) _max = _min + zoom;
+    if (_min == _max) return [_min - 50, _min + 50, _min, 0];
+    return [_min, _max, _avg / entries.length, 1];
   }
 
   final stat = minMaxAvg();
   var minus = stat[0];
-  var mul = 1.0;
-  if (stat[0] == stat[1]) {
-    mul = stat[0] == 0 ? 0 : 80 / stat[0];
-    minus = 0;
-  } else {
-    mul = 100 / (stat[1] - stat[0]);
-  }
+  var mul = 100 / (stat[1] - stat[0]);
   entries = entries.map((e) {
     final v = e.value;
     final val = (v - minus) * mul;
@@ -354,8 +350,8 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
   if (axisID != null) series.setAttribute(charts.measureAxisIdKey, axisID);
 
   List<charts.TickSpec<num>> spec;
-  if (stat[0] == stat[1]) {
-    spec = [charts.TickSpec<num>(80, label: indicator.format(stat[0], null))];
+  if (stat[3] == 0) {
+    spec = [charts.TickSpec<num>(50, label: indicator.format(stat[2], null))];
   } else {
     spec = [0, 25, 50, 75, 100]
         .map((e) => charts.TickSpec<num>(e,
