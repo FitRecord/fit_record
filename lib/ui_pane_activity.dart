@@ -65,15 +65,16 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       final altitude =
           _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
       final pace = _paceSpeedSeries(
-          ctx, indicator, item.extractData(indicator, from, to), true,
+          ctx, indicator, profile, item.extractData(indicator, from, to),
           average: row['loc_${scope}_${indicator}']);
-      final hrm = _hrmSeries(ctx, item.extractData('sensor_hrm', from, to),
+      final hrm = _hrmSeries(
+          ctx, profile, item.extractData('sensor_hrm', from, to),
           average: row['sensor_hrm_${scope}_avg']);
       final cadence = _cadenceSeries(
           ctx, item.extractData('sensor_cadence', from, to),
           average: row['sensor_cadence_${scope}_avg']);
       final power = _powerSeries(
-          ctx, item.extractData('sensor_power', from, to),
+          ctx, profile, item.extractData('sensor_power', from, to),
           average: row['sensor_power_${scope}_avg']);
       return _TabInfo(lap, row, altitude, pace, hrm, power, cadence, timeTicks);
     }
@@ -95,8 +96,8 @@ class _RecordDetailsState extends State<RecordDetailsPane>
 
   Future _load(BuildContext ctx) async {
     try {
-      final item = await widget.provider.records
-          .loadOne(widget.provider.indicators, widget.id);
+      final item = await widget.provider.records.loadOne(
+          widget.provider.indicators, widget.provider.profiles, widget.id);
       final profile = await widget.provider.profiles.one(item.profileID);
       final _tabs = _loadTabs(ctx, profile, item);
       setState(() {
@@ -167,16 +168,12 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         axisID: 'secondaryMeasureAxisId');
   }
 
-  ChartSeries _hrmSeries(BuildContext ctx, Map<int, double> data,
+  ChartSeries _hrmSeries(
+      BuildContext ctx, Profile profile, Map<int, double> data,
       {double average}) {
-    return chartsMake(
-      ctx,
-      data,
-      'hrm',
-      charts.MaterialPalette.red.shadeDefault,
-      widget.provider.indicators.indicators['sensor_hrm'],
-      average: average,
-    );
+    return chartsMake(ctx, data, 'hrm', charts.MaterialPalette.red.shadeDefault,
+        widget.provider.indicators.indicators['sensor_hrm'],
+        average: average, zones: profile.zonesHrmJson);
   }
 
   ChartSeries _cadenceSeries(BuildContext ctx, Map<int, double> data,
@@ -191,7 +188,8 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     );
   }
 
-  ChartSeries _powerSeries(BuildContext ctx, Map<int, double> data,
+  ChartSeries _powerSeries(
+      BuildContext ctx, Profile profile, Map<int, double> data,
       {double average}) {
     return chartsMake(
       ctx,
@@ -200,11 +198,12 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       charts.MaterialPalette.yellow.shadeDefault,
       widget.provider.indicators.indicators['sensor_power'],
       average: average,
+      zones: profile.zonesPowerJson,
     );
   }
 
-  ChartSeries _paceSpeedSeries(
-      BuildContext ctx, String indicator, Map<int, double> data, bool invert,
+  ChartSeries _paceSpeedSeries(BuildContext ctx, String indicator,
+      Profile profile, Map<int, double> data,
       {double average}) {
     return chartsMake(
       ctx,
@@ -214,7 +213,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       widget.provider.indicators.indicators[indicator],
       smooth: 20,
       average: average,
-      invert: invert,
+      zones: profile.zonesPaceJson,
     );
   }
 

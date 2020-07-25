@@ -139,7 +139,7 @@ class DataProvider {
           return provider.records.lap(provider.indicators);
         case 'finish':
           final args = call.arguments as Map;
-          return provider.records.finish(provider.indicators, args['save']);
+          return provider.records.finish(provider, args['save']);
         case 'sensorsData':
           final args = call.arguments as Map;
           return () async {
@@ -219,6 +219,6 @@ class DataProvider {
   Future<int> importOne(String type, String file) async {
     final exporter = export.exporter(type);
     if (exporter == null) throw ArgumentError('Invalid import type');
-    return export.importFile(exporter, indicators, records, profiles, file);
+    return export.importFile(exporter, this, file);
   }
 }

@@ -292,14 +292,20 @@ List<MapEntry<int, double>> _smooth(
   });
 }
 
-ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
-    charts.Color color, IndicatorValue indicator,
-    {String renderer,
-    String axisID,
-    int smooth = 10,
-    double zoom,
-    double average,
-    bool invert = false}) {
+ChartSeries chartsMake(
+  BuildContext ctx,
+  Map<int, double> data,
+  String id,
+  charts.Color color,
+  IndicatorValue indicator, {
+  String renderer,
+  String axisID,
+  int smooth = 10,
+  double zoom,
+  double average,
+  bool invert = false,
+  List<Map<String, double>> zones,
+}) {
   if (data == null || data.length < 3) return null;
 
   final textColor = charts.ColorUtil.fromDartColor(
@@ -318,20 +324,39 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
     });
     if (zoom != null && _max - _min < zoom) _max = _min + zoom;
     if (_min == _max) return [_min - 50, _min + 50, _min, 0];
+    if (zones != null && zones[0]['from'] != null && zones[4]['to'] != null) {
+      return [zones[0]['from'], zones[4]['to'], _avg / entries.length, 1];
+    }
     return [_min, _max, _avg / entries.length, 1];
   }
 
   final stat = minMaxAvg();
   var minus = stat[0];
   var mul = 100 / (stat[1] - stat[0]);
-  entries = entries.map((e) {
-    final v = e.value;
+  double _valueNormalized(double v) {
     final val = (v - minus) * mul;
-    return MapEntry(e.key, invert ? 100 - val : val);
+    return invert ? 100 - val : val;
+  }
+
+  entries = entries.map((e) {
+    return MapEntry(e.key, _valueNormalized(e.value));
   }).toList();
   entries = _simplify(entries, 200);
 
   charts.RangeAnnotation averageAnn;
+  charts.RangeAnnotation zonesAnn;
+  if (zones != null) {
+    final list = <charts.RangeAnnotationSegment>[];
+    for (var i = 0; i < zones.length; i++) {
+      final z = zones[i];
+      if (z['from'] != null && z['to'] != null)
+        list.add(charts.RangeAnnotationSegment(_valueNormalized(z['from']),
+            _valueNormalized(z['to']), charts.RangeAnnotationAxisType.measure,
+            color: charts.ColorUtil.fromDartColor(
+                zoneColor(i).shade900.withOpacity(0.4))));
+    }
+    zonesAnn = charts.RangeAnnotation(list);
+  }
   if (average != null) {
     final val = (average - minus) * mul;
     averageAnn = charts.RangeAnnotation([
@@ -340,11 +365,18 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
           strokeWidthPx: 1, color: color)
     ]);
   }
+  double _entryValue(double value) {
+    if (value < 0) return 0;
+    if (value > 100) return 100;
+    return value;
+  }
+
   final series = charts.Series<MapEntry<int, double>, int>(
       id: id,
       colorFn: (entry, index) => color,
+      strokeWidthPxFn: (entry, index) => 2,
       domainFn: (entry, index) => entry.key,
-      measureFn: (entry, index) => entry.value,
+      measureFn: (entry, index) => _entryValue(entry.value),
       data: entries);
   if (renderer != null) series.setAttribute(charts.rendererIdKey, renderer);
   if (axisID != null) series.setAttribute(charts.measureAxisIdKey, axisID);
@@ -365,7 +397,7 @@ ChartSeries chartsMake(BuildContext ctx, Map<int, double> data, String id,
       renderSpec: charts.SmallTickRendererSpec(
           labelStyle: charts.TextStyleSpec(color: textColor)),
       tickProviderSpec: charts.StaticNumericTickProviderSpec(spec));
-  return ChartSeries(series, axisSpec, [averageAnn]);
+  return ChartSeries(series, axisSpec, [averageAnn, zonesAnn]);
 }
 
 charts.SeriesRendererConfig<num> chartsAltitudeRenderer() =>
@@ -454,4 +486,27 @@ String textFromCtrl(TextEditingController ctrl) {
   final result = ctrl.text?.trim();
   if (result.isEmpty) return null;
   return result;
+}
+
+int parseDuration(String value) {
+  final parts = value.split(':').map((s) => int.tryParse(s, radix: 10));
+  if (parts.contains(null)) {
+    return null;
+  }
+  return parts.reduce((value, element) => value * 60 + element);
+}
+
+MaterialColor zoneColor(int zone) {
+  switch (zone) {
+    case 0:
+      return Colors.grey;
+    case 1:
+      return Colors.blue;
+    case 2:
+      return Colors.green;
+    case 3:
+      return Colors.yellow;
+    case 4:
+      return Colors.red;
+  }
 }

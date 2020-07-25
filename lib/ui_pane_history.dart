@@ -569,16 +569,8 @@ class _RecordEditorState extends State<_RecordEditor> {
     );
   }
 
-  int _parseDuration(String value) {
-    final parts = value.split(':').map((s) => int.tryParse(s, radix: 10));
-    if (parts.contains(null)) {
-      return null;
-    }
-    return parts.reduce((value, element) => value * 60 + element);
-  }
-
   String _validateDuration(String value) {
-    int val = _parseDuration(value);
+    int val = parseDuration(value);
     if (val == null || val < 0) return 'Invalid value';
     if (val == 0) return 'Mandatory field';
     return null;
@@ -595,11 +587,8 @@ class _RecordEditorState extends State<_RecordEditor> {
   _save(BuildContext context) async {
     if (!_formID.currentState.validate()) return false;
     try {
-      final id = await widget._provider.records.addManual(
-          widget._provider.indicators,
-          _profile.id,
-          _dateTime,
-          _parseDuration(_duration.text),
+      final id = await widget._provider.records.addManual(widget._provider,
+          _profile.id, _dateTime, parseDuration(_duration.text),
           title: textFromCtrl(_title),
           description: textFromCtrl(_description),
           distance: double.parse(textFromCtrl(_distance)) * 1000);

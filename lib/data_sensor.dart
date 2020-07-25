@@ -5,7 +5,7 @@ import 'package:android/data_storage.dart';
 import 'package:android/ui_utils.dart';
 
 abstract class SensorHandler {
-  Map<String, double> handleData(Map<String, double> data,
+  Map<String, double> handleData(Profile profile, Map<String, double> data,
       List<Trackpoint> trackpoints, Map<String, double> cache);
 
   void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache);
@@ -18,11 +18,21 @@ abstract class SensorHandler {
     if (a == null || b == null || b == 0) return 0;
     return a / b;
   }
+
+  int _inZone(double value, List<Map<String, double>> zones) {
+    if (value == null || zones == null) return null;
+    for (var i = 0; i < zones.length; i++) {
+      final from = zones[i]['from'];
+      final to = zones[i]['to'];
+      if (from != null && to != null && from <= value && value < to) return i;
+    }
+    return null;
+  }
 }
 
 class TimeSensorHandler extends SensorHandler {
   @override
-  Map<String, double> handleData(Map<String, double> data,
+  Map<String, double> handleData(Profile profile, Map<String, double> data,
       Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     final result = new Map<String, double>();
     final last = _last(trackpoints);
@@ -73,7 +83,7 @@ class LocationSensorHandler extends SensorHandler {
   }
 
   @override
-  Map<String, double> handleData(Map<String, double> data,
+  Map<String, double> handleData(Profile profile, Map<String, double> data,
       List<Trackpoint> trackpoints, Map<String, double> cache) {
     final result = new Map<String, double>();
     final _copyFromCache = (List<String> keys) =>
@@ -157,7 +167,7 @@ class LocationSensorHandler extends SensorHandler {
 
 class ConnectedSensorHandler extends SensorHandler {
   @override
-  Map<String, double> handleData(Map<String, double> data,
+  Map<String, double> handleData(Profile profile, Map<String, double> data,
       List<Trackpoint> trackpoints, Map<String, double> cache) {
     final result = new Map<String, double>();
     final _incCache =
@@ -169,13 +179,16 @@ class ConnectedSensorHandler extends SensorHandler {
       }
       result['sensor_$key'] = cache[key];
     };
-    final _calcStat = (String key, String scope) {
+    final _calcStat =
+        (String key, String scope, List<Map<String, double>> zones) {
       _incCache('${key}_${scope}_times', 1);
       _incCache('${key}_${scope}_values', data[key]);
       _updateMinMax('${key}_${scope}_min', data[key], true);
       _updateMinMax('${key}_${scope}_max', data[key], false);
       result['sensor_${key}_${scope}_avg'] = _divide(
           cache['${key}_${scope}_values'], cache['${key}_${scope}_times']);
+      final zone = _inZone(data[key], zones);
+      result['sensor_${key}_zone'] = zone?.toDouble();
     };
     ['hrm', 'power', 'cadence', 'speed_ms', 'stride_len_m', 'distance_m']
         .forEach((element) {
@@ -183,25 +196,25 @@ class ConnectedSensorHandler extends SensorHandler {
     });
     if (data.containsKey('speed_ms')) {
       result['speed_ms'] = data['speed_ms'];
-      result['pace_ms'] = 1.0 / data['speed_ms'];
+      result['pace_sm'] = 1.0 / data['speed_ms'];
     }
     final last = _last(trackpoints);
     if (last == null) return result;
     if (data.containsKey('hrm')) {
-      _calcStat('hrm', 'total');
-      _calcStat('hrm', 'lap');
+      _calcStat('hrm', 'total', profile?.zonesHrmJson);
+      _calcStat('hrm', 'lap', profile?.zonesHrmJson);
     }
     if (data.containsKey('power')) {
-      _calcStat('power', 'total');
-      _calcStat('power', 'lap');
+      _calcStat('power', 'total', profile?.zonesPowerJson);
+      _calcStat('power', 'lap', profile?.zonesPowerJson);
     }
     if (data.containsKey('cadence')) {
-      _calcStat('cadence', 'total');
-      _calcStat('cadence', 'lap');
+      _calcStat('cadence', 'total', null);
+      _calcStat('cadence', 'lap', null);
     }
     if (data.containsKey('stride_len_m')) {
-      _calcStat('stride_len_m', 'total');
-      _calcStat('stride_len_m', 'lap');
+      _calcStat('stride_len_m', 'total', null);
+      _calcStat('stride_len_m', 'lap', null);
     }
     return result;
   }
@@ -488,8 +501,8 @@ class SensorIndicatorManager {
     return [Trackpoint(startTime, 0, start), Trackpoint(finishTime, 0, finish)];
   }
 
-  String formatSimple(String name, double value) =>
-      formatFor(name, Map.fromIterables([name], [value]), withType: true);
+  String formatSimple(String name, double value, [bool withType = true]) =>
+      formatFor(name, Map.fromIterables([name], [value]), withType: withType);
 
   String formatFor(String name, Map<String, double> data,
       {bool withType = false}) {

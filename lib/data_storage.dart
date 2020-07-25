@@ -23,6 +23,26 @@ class Profile {
   int lastUsed;
   String screens, screensExt, zonesHrm, zonesPace, zonesPower, config;
 
+  List<Map<String, double>> _zonesJson(String key, String value) {
+    try {
+      Map checks = configJson['zones'];
+      if (checks != null && checks[key] == true) {
+        List list = jsonDecode(value);
+        if (list.length == 5) {
+          return list.map((e) => (e as Map).cast<String, double>()).toList();
+        }
+      } else
+        return null;
+    } catch (e) {
+//      print('JSON decode error: $e');
+    }
+    return List.generate(5, (index) => Map<String, double>());
+  }
+
+  get zonesHrmJson => _zonesJson('hrm', zonesHrm);
+  get zonesPaceJson => _zonesJson('pace', zonesPace);
+  get zonesPowerJson => _zonesJson('power', zonesPower);
+
   Map<String, dynamic> get configJson {
     try {
       return jsonDecode(config);
@@ -218,7 +238,7 @@ class RecordStorage extends DatabaseStorage {
     return null;
   }
 
-  Future<int> finish(SensorIndicatorManager sensors, bool save) async {
+  Future<int> finish(DataProvider provider, bool save) async {
     final r = await active();
     if (r == null) return null;
     await openSession((t) async {
@@ -233,7 +253,7 @@ class RecordStorage extends DatabaseStorage {
     });
     _clear();
     if (save) {
-      await loadOne(sensors, r.id);
+      await loadOne(provider.indicators, provider.profiles, r.id);
       return r.id;
     }
     return null;
@@ -257,13 +277,15 @@ class RecordStorage extends DatabaseStorage {
   Future<SensorsDataResult> sensorsData(
       Map args, SensorIndicatorManager sensors, ProfileStorage profiles) async {
     final record = await active();
+    final profile = await profiles.one(record?.profileID);
     final data = Map<String, double>();
     if (record != null) data['status'] = record.status.toDouble();
     if (trackpoints == null && record != null) {
       cache = Map<String, double>();
       trackpoints = <Trackpoint>[];
       final list = await loadTrackpoints(record);
-      _processTrackpoints(sensors, list, cache, trackpoints, null, null);
+      _processTrackpoints(
+          profile, sensors, list, cache, trackpoints, null, null);
     }
 //    print('New sensor data: $args');
     final ts = args.values
@@ -276,9 +298,8 @@ class RecordStorage extends DatabaseStorage {
     args.forEach((key, value) {
       final sensorData = (value as Map)
           .map((key, value) => MapEntry<String, double>(key, value));
-      final handlerData = sensors
-          .handler(key)
-          .handleData(sensorData, dataUpdated ? trackpoints : null, cache);
+      final handlerData = sensors.handler(key).handleData(
+          profile, sensorData, dataUpdated ? trackpoints : null, cache);
       data.addAll(handlerData);
     });
     if (dataUpdated) {
@@ -467,6 +488,7 @@ class RecordStorage extends DatabaseStorage {
   }
 
   _processTrackpoints(
+      Profile profile,
       SensorIndicatorManager sensors,
       List<Trackpoint> list,
       Map<String, double> cache,
@@ -491,8 +513,9 @@ class RecordStorage extends DatabaseStorage {
         element.data.forEach((key, value) {
           final sensorData = (value as Map)
               .map((key, value) => MapEntry<String, double>(key, value));
-          final handlerData =
-              sensors.handler(key).handleData(sensorData, trackpoints, cache);
+          final handlerData = sensors
+              .handler(key)
+              .handleData(profile, sensorData, trackpoints, cache);
           data.addAll(handlerData);
         });
         results?.add(data);
@@ -525,16 +548,18 @@ class RecordStorage extends DatabaseStorage {
     return item;
   }
 
-  Future<Record> loadOne(SensorIndicatorManager sensors, int id) async {
+  Future<Record> loadOne(
+      SensorIndicatorManager sensors, ProfileStorage profiles, int id) async {
     final item = await one(id);
     if (item == null || item.status != 2) return null;
+    final profile = await profiles.one(item.profileID);
     item.trackpoints = <Map<String, double>>[];
     item.laps = <int>[];
     final tps = await loadTrackpoints(item);
     final cache = Map<String, double>();
     final trackpoints = <Trackpoint>[];
     _processTrackpoints(
-        sensors, tps, cache, trackpoints, item.laps, item.trackpoints);
+        profile, sensors, tps, cache, trackpoints, item.laps, item.trackpoints);
     if (item.metaJson == null) {
       return _updateMeta(item);
     }
@@ -548,10 +573,10 @@ class RecordStorage extends DatabaseStorage {
   }
 
   Future<int> addManual(
-      SensorIndicatorManager sensors, int id, DateTime dateTime, int duration,
+      DataProvider provider, int id, DateTime dateTime, int duration,
       {String title, String description, double distance}) {
     final trackpoints =
-        sensors.makeManualTrackpoints(dateTime, duration, distance);
+        provider.indicators.makeManualTrackpoints(dateTime, duration, distance);
     return openSession((t) async {
       final added = await t.insert('"records"', {
         'uid': Uuid().v4(),
@@ -569,7 +594,7 @@ class RecordStorage extends DatabaseStorage {
           'data': jsonEncode(e.data),
         });
       }));
-      await loadOne(sensors, added);
+      await loadOne(provider.indicators, provider.profiles, added);
       return added;
     });
   }
@@ -589,6 +614,9 @@ class ProfileStorage extends DatabaseStorage {
     final profile = Profile(e['id'], e['title'], e['type'], e['icon']);
     profile.screens = e['screens'];
     profile.config = e['config'];
+    profile.zonesPace = e['zones_pace'];
+    profile.zonesHrm = e['zones_hrm'];
+    profile.zonesPower = e['zones_power'];
     return profile;
   }
 
@@ -686,10 +714,13 @@ class ProfileStorage extends DatabaseStorage {
     }
   }
 
-  updateJsonField(Profile profile, String field, dynamic json) async {
+  Future<String> updateJsonField(
+      Profile profile, String field, dynamic json) async {
     int id = await ensure(profile);
-    await openSession((t) => t.update('"profiles"', {field: jsonEncode(json)},
+    final jsonStr = jsonEncode(json);
+    await openSession((t) => t.update('"profiles"', {field: jsonStr},
         where: '"id"=?', whereArgs: [id]));
+    return jsonStr;
   }
 
   Future<Map> profileInfo(int id) async {
