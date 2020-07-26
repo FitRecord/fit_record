@@ -105,7 +105,7 @@ class LocationSensorHandler extends SensorHandler {
       time = (data['ts'] ?? 0) - (lastData['ts'] ?? 0);
     }
     Map lastLoc = data;
-    trackpoints?.reversed?.take(20)?.forEach((tp) {
+    trackpoints?.reversed?.take(30)?.forEach((tp) {
       final loc = tp.data['location'];
       lastDistance += _distance(lastLoc, loc);
       lastTime += (lastLoc['ts'] - loc['ts']);
@@ -147,8 +147,6 @@ class LocationSensorHandler extends SensorHandler {
     result['loc_pace_sm'] = _divide(lastTime / 1000, lastDistance);
     result['speed_ms'] = result['loc_speed_ms'];
     result['pace_sm'] = result['loc_pace_sm'];
-
-//    print('Location sensor: $data, $result');
     return result;
   }
 

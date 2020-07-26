@@ -621,6 +621,7 @@ class ProfileStorage extends DatabaseStorage {
   }
 
   Future<Profile> one(int id) async {
+    if (id == null) return null;
     final result = (await openSession((t) => t.query('"profiles"',
         where: '"id"=?',
         whereArgs: [id]).then((list) => list.map((e) => _toProfile(e)))));

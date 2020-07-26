@@ -296,14 +296,13 @@ ChartSeries chartsMake(
   BuildContext ctx,
   Map<int, double> data,
   String id,
-  charts.Color color,
+  MaterialColor color,
   IndicatorValue indicator, {
   String renderer,
   String axisID,
   int smooth = 10,
   double zoom,
   double average,
-  bool invert = false,
   List<Map<String, double>> zones,
 }) {
   if (data == null || data.length < 3) return null;
@@ -334,14 +333,13 @@ ChartSeries chartsMake(
   var minus = stat[0];
   var mul = 100 / (stat[1] - stat[0]);
   double _valueNormalized(double v) {
-    final val = (v - minus) * mul;
-    return invert ? 100 - val : val;
+    return (v - minus) * mul;
   }
 
   entries = entries.map((e) {
     return MapEntry(e.key, _valueNormalized(e.value));
   }).toList();
-  entries = _simplify(entries, 200);
+  entries = _simplify(entries, 300);
 
   charts.RangeAnnotation averageAnn;
   charts.RangeAnnotation zonesAnn;
@@ -360,9 +358,9 @@ ChartSeries chartsMake(
   if (average != null) {
     final val = (average - minus) * mul;
     averageAnn = charts.RangeAnnotation([
-      charts.LineAnnotationSegment(
-          invert ? 100 - val : val, charts.RangeAnnotationAxisType.measure,
-          strokeWidthPx: 1, color: color)
+      charts.LineAnnotationSegment(val, charts.RangeAnnotationAxisType.measure,
+          strokeWidthPx: 1,
+          color: charts.ColorUtil.fromDartColor(color.shade300))
     ]);
   }
   double _entryValue(double value) {
@@ -373,8 +371,9 @@ ChartSeries chartsMake(
 
   final series = charts.Series<MapEntry<int, double>, int>(
       id: id,
-      colorFn: (entry, index) => color,
-      strokeWidthPxFn: (entry, index) => 2,
+      colorFn: (entry, index) => charts.ColorUtil.fromDartColor(color.shade400),
+      strokeWidthPxFn: (entry, index) =>
+          entry.value < 0 || entry.value > 100 ? 1 : 2,
       domainFn: (entry, index) => entry.key,
       measureFn: (entry, index) => _entryValue(entry.value),
       data: entries);
@@ -388,8 +387,7 @@ ChartSeries chartsMake(
     spec = [0, 25, 50, 75, 100]
         .map((e) => charts.TickSpec<num>(e,
             label: indicator.format(
-                (stat[1] - stat[0]) * (invert ? 100 - e : e) / 100 + stat[0],
-                null)))
+                (stat[1] - stat[0]) * e / 100 + stat[0], null)))
         .toList();
   }
   final axisSpec = charts.NumericAxisSpec(
@@ -440,11 +438,10 @@ Widget chartsMakeChart(
   final axis =
       series.where((element) => element != null).map((e) => e.series).toList();
   if (axis.isEmpty || series.first == null) return null;
-  final annotations = series
-      .where((el) => el?.behavior != null)
-      .fold(<charts.RangeAnnotation>[], (prev, el) {
-    prev.addAll(el.behavior.where((el) => el != null));
-    return prev;
+  final annotations = <charts.RangeAnnotation>[];
+  series.forEach((element) {
+    if (element?.behavior != null)
+      annotations.addAll(element.behavior.where((element) => element != null));
   });
   final textColor = charts.ColorUtil.fromDartColor(
       Theme.of(ctx).primaryTextTheme.bodyText1.color);

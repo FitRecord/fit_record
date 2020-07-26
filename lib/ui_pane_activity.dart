@@ -156,11 +156,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
   }
 
   ChartSeries _altitudeSeries(BuildContext ctx, Map<int, double> data) {
-    return chartsMake(
-        ctx,
-        data,
-        'altitude',
-        charts.MaterialPalette.gray.shadeDefault,
+    return chartsMake(ctx, data, 'altitude', Colors.grey,
         widget.provider.indicators.indicators['loc_altitude'],
         renderer: 'altitude',
         smooth: 30,
@@ -171,9 +167,15 @@ class _RecordDetailsState extends State<RecordDetailsPane>
   ChartSeries _hrmSeries(
       BuildContext ctx, Profile profile, Map<int, double> data,
       {double average}) {
-    return chartsMake(ctx, data, 'hrm', charts.MaterialPalette.red.shadeDefault,
-        widget.provider.indicators.indicators['sensor_hrm'],
-        average: average, zones: profile.zonesHrmJson);
+    return chartsMake(
+      ctx,
+      data,
+      'hrm',
+      Colors.red,
+      widget.provider.indicators.indicators['sensor_hrm'],
+      average: average,
+      zones: profile.zonesHrmJson,
+    );
   }
 
   ChartSeries _cadenceSeries(BuildContext ctx, Map<int, double> data,
@@ -182,7 +184,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       ctx,
       data,
       'cadence',
-      charts.MaterialPalette.pink.shadeDefault,
+      Colors.pink,
       widget.provider.indicators.indicators['sensor_cadence'],
       average: average,
     );
@@ -195,7 +197,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       ctx,
       data,
       'power',
-      charts.MaterialPalette.yellow.shadeDefault,
+      Colors.yellow,
       widget.provider.indicators.indicators['sensor_power'],
       average: average,
       zones: profile.zonesPowerJson,
@@ -209,7 +211,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       ctx,
       data,
       'pace/speed',
-      charts.MaterialPalette.blue.shadeDefault,
+      Colors.blue,
       widget.provider.indicators.indicators[indicator],
       smooth: 20,
       average: average,
