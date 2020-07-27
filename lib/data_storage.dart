@@ -23,6 +23,9 @@ class Profile {
   int lastUsed;
   String screens, screensExt, zonesHrm, zonesPace, zonesPower, config;
 
+  static List<String> types = ['Running', 'Cycling', 'Skiing', 'Swimming'];
+  static List<String> icons = ['run', 'bike', 'walk', 'row'];
+
   List<Map<String, double>> _zonesJson(String key, String value) {
     try {
       Map checks = configJson['zones'];
@@ -452,31 +455,37 @@ class RecordStorage extends DatabaseStorage {
       {Profile profile, String type, String statKey}) async {
     final where = ['"status"=?'];
     final whereArgs = <dynamic>[2];
-    final start = nextFrom(from, range, -shift);
-    final end = nextFrom(start, range, 1);
-    where.add('"started" >= ? and "started" < ?');
-    whereArgs.add(start.millisecondsSinceEpoch);
-    whereArgs.add(end.millisecondsSinceEpoch);
+    DateTime start, end;
+    if (range != null) {
+      start = nextFrom(from, range, -shift);
+      end = nextFrom(start, range, 1);
+      where.add('"started" >= ? and "started" < ?');
+      whereArgs.add(start.millisecondsSinceEpoch);
+      whereArgs.add(end.millisecondsSinceEpoch);
+    }
     if (profile != null) {
       where.add('"profile_id"=?');
       whereArgs.add(profile.id);
     }
     final profilesList = await profiles.all();
     final list = await openSession((t) async {
-      final list = await t.query('"records"',
-          where: where.join(' and '),
-          whereArgs: whereArgs,
-          orderBy: '"started" desc',
-          limit: 50);
+      final list = await t.query(
+        '"records"',
+        where: where.join(' and '),
+        whereArgs: whereArgs,
+        orderBy: '"started" desc',
+      );
       return list.map((row) => _toRecord(row)).toList();
     });
-    final result = HistoryResult(list, start, end.subtract(Duration(days: 1)),
+    final result = HistoryResult(list, start, end?.subtract(Duration(days: 1)),
         Map<String, double>(), LinkedHashMap<int, double>());
-    final keys = [
-      'time_total',
-      'loc_total_distance',
-    ];
-    _calcHistoryStats(result, range, keys, statKey);
+    if (statKey != null) {
+      final keys = [
+        'time_total',
+        'loc_total_distance',
+      ];
+      _calcHistoryStats(result, range, keys, statKey);
+    }
     return result;
   }
 
@@ -631,7 +640,7 @@ class ProfileStorage extends DatabaseStorage {
 
   Future<List<Profile>> all() async {
     final result = (await openSession((t) => t
-            .query('"profiles" order by "last_used" desc, "title"')
+            .query('"profiles" order by "last_used" desc, "id"')
             .then((list) => list.map((e) => _toProfile(e)))))
         .toList();
     if (result.isEmpty) {
@@ -744,5 +753,25 @@ class ProfileStorage extends DatabaseStorage {
   Future<Profile> findByType(String type) async {
     return all().then(
         (list) => list.firstWhere((p) => p.type == type, orElse: () => null));
+  }
+
+  Future<int> update(Profile profile) async {
+    final data = {
+      'title': profile.title,
+      'type': profile.type,
+      'icon': profile.icon,
+    };
+    if (profile.id == null) {
+      return openSession((t) => t.insert('"profiles"', data));
+    } else {
+      await openSession((t) => t.update('"profiles"', data,
+          where: '"id"=?', whereArgs: [profile.id]));
+      return profile.id;
+    }
+  }
+
+  Future remove(Profile profile) async {
+    return openSession((t) =>
+        t.delete('"profiles"', where: '"id"=?', whereArgs: [profile.id]));
   }
 }

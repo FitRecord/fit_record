@@ -24,13 +24,49 @@ Widget dotsMenu(BuildContext ctx, Map<String, Function()> data) {
           .toList());
 }
 
-Icon profileIcon(Profile profile) {
-  switch (profile.icon) {
+IconData profileTypeIcon(String icon) {
+  switch (icon) {
     case 'run':
-      return Icon(Icons.directions_run);
+      return Icons.directions_run;
+    case 'bike':
+      return Icons.directions_bike;
+    case 'walk':
+      return Icons.directions_walk;
+    case 'row':
+      return Icons.rowing;
   }
-  return Icon(Icons.warning);
+  return Icons.warning;
 }
+
+Widget profileInfo(Profile profile, TextStyle style) => Row(
+      children: [
+        Padding(
+          padding: EdgeInsets.only(right: 4.0),
+          child: profileIcon(profile),
+        ),
+        Text(
+          profile.title,
+          style: style,
+        )
+      ],
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+    );
+
+Widget profileDropdown(List<Profile> profiles, Profile selected,
+    TextStyle style, Function(Profile) onChanged) {
+  return DropdownButton<Profile>(
+      value: selected,
+      items: profiles.map((profile) {
+        return DropdownMenuItem<Profile>(
+          value: profile,
+          child: profileInfo(profile, style),
+        );
+      }).toList(),
+      onChanged: (value) => onChanged(value));
+}
+
+Icon profileIcon(Profile profile) => Icon(profileTypeIcon(profile.icon));
 
 Future<bool> yesNoDialog(BuildContext ctx, String title) async {
   var result = await showDialog(

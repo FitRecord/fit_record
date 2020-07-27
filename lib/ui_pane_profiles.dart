@@ -334,12 +334,13 @@ class ProfilesPane extends MainPaneState {
     {'title': 'Power Zones', 'id': 'power', 'short': 'Power'},
   ]);
 
-  _init() async {
+  _init(int id) async {
     try {
       final list = await widget.provider.profiles.all();
       setState(() {
         profiles = list;
-        profile = list.first;
+        profile = list.firstWhere((element) => element.id == id,
+            orElse: () => list.first);
       });
     } catch (e) {
       print('Failed to get profiles $e');
@@ -350,7 +351,7 @@ class ProfilesPane extends MainPaneState {
   @override
   void initState() {
     super.initState();
-    _init();
+    _init(null);
   }
 
   List<Map<String, String>> _activeTabs() {
@@ -368,38 +369,38 @@ class ProfilesPane extends MainPaneState {
   }
 
   Widget _appBar(BuildContext ctx, List<Tab> tabs) {
-    final selector = DropdownButton<Profile>(
-        value: profile,
-        items: profiles.map((profile) {
-          return DropdownMenuItem<Profile>(
-              value: profile,
-              child: Row(
-                children: [
-                  profileIcon(profile),
-                  Text(
-                    profile.title,
-                    style: Theme.of(ctx).primaryTextTheme.headline6,
-                  )
-                ],
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-              ));
-        }).toList(),
-        onChanged: (value) => null);
+    final selector = profileDropdown(
+      profiles,
+      profile,
+      Theme.of(ctx).primaryTextTheme.headline6,
+      (value) => _select(value),
+    );
     return AppBar(
       title: selector,
       bottom: TabBar(tabs: tabs),
       actions: [
         IconButton(
           icon: Icon(Icons.edit),
-//          onPressed: () => null,
+          onPressed: () => _edit(ctx, profile),
         ),
         IconButton(
           icon: Icon(Icons.add),
-//          onPressed: () => null,
+          onPressed: () => _edit(ctx, null),
         ),
       ],
     );
+  }
+
+  _select(Profile selected) {
+    setState(() => profile = selected);
+  }
+
+  _edit(BuildContext ctx, Profile profile) async {
+    final id = await _ProfileEditor.open(ctx, widget.provider,
+        profile ?? Profile(null, 'Running', Profile.types[0], 'run'));
+    if (id != null) {
+      _init(id);
+    }
   }
 
   _updateJsonField(BuildContext ctx, String field, dynamic json,
@@ -634,6 +635,154 @@ class _ZonesEditorState extends State<_ZonesEditor> {
     return SingleChildScrollView(
       child: Form(
         child: LayoutBuilder(builder: (ctx, box) => _buildForm(ctx)),
+      ),
+    );
+  }
+}
+
+class _ProfileEditor extends StatefulWidget {
+  final DataProvider _provider;
+  final Profile _profile;
+
+  const _ProfileEditor(this._provider, this._profile);
+
+  @override
+  State<StatefulWidget> createState() => _ProfileEditorState();
+
+  static Future<int> open(
+      BuildContext ctx, DataProvider provider, Profile profile) async {
+    return Navigator.push(ctx,
+        MaterialPageRoute(builder: (ctx) => _ProfileEditor(provider, profile)));
+  }
+}
+
+class _ProfileEditorState extends State<_ProfileEditor> {
+  final title = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    title.text = widget._profile.title;
+  }
+
+  _changeType(String type) {
+    setState(() => widget._profile.type = type);
+  }
+
+  _changeIcon(String icon) {
+    setState(() => widget._profile.icon = icon);
+  }
+
+  _selectIcon(BuildContext ctx) async {
+    var result = await showDialog<String>(
+        context: ctx,
+        builder: (ctx) => AlertDialog(
+              title: Text('Select icon'),
+              content: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                children: Profile.icons
+                    .map((e) => IconButton(
+                          icon: Icon(profileTypeIcon(e)),
+                          onPressed: () => Navigator.pop(ctx, e),
+                        ))
+                    .toList(),
+              ),
+              actions: <Widget>[
+                FlatButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                    },
+                    child: Text('Cancel'))
+              ],
+            ));
+    if (result != null) return _changeIcon(result);
+  }
+
+  _save(BuildContext ctx) async {
+    if (_formKey.currentState.validate()) {
+      widget._profile.title = title.text.trim();
+      final id = await widget._provider.profiles.update(widget._profile);
+      Navigator.pop(ctx, id);
+    }
+  }
+
+  _delete(BuildContext ctx) async {
+    final recordings = await widget._provider.records.history(
+        widget._provider.profiles, null, null, null,
+        profile: widget._profile);
+    if (recordings.records.isNotEmpty) {
+      showMessage(
+          ctx, 'Failed to delete a profile. Are there any recordings already?');
+      return;
+    }
+    final yes =
+        await yesNoDialog(ctx, 'Are you sure want to delete a profile?');
+    if (!yes) return;
+    await widget._provider.profiles.remove(widget._profile);
+    Navigator.pop(ctx, -1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[];
+    final iconButton = RaisedButton(
+      child: profileIcon(widget._profile),
+      onPressed: () => _selectIcon(context),
+    );
+    final typeDropbox = DropdownButtonFormField<String>(
+      decoration: InputDecoration(labelText: 'Type'),
+      value: widget._profile.type,
+      items: Profile.types
+          .map((e) => DropdownMenuItem<String>(
+                child: Text(e),
+                value: e,
+              ))
+          .toList(),
+      onChanged: (value) => _changeType(value),
+    );
+    items.add(Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(right: 8.0),
+          child: iconButton,
+        ),
+        Expanded(child: typeDropbox),
+      ],
+    ));
+    items.add(TextFormField(
+      controller: title,
+      decoration: InputDecoration(labelText: 'Title'),
+      validator: (val) =>
+          val?.trim()?.isNotEmpty == true ? null : 'Required field',
+    ));
+    final actions = <Widget>[];
+    if (widget._profile.id != null) {
+      actions.add(IconButton(
+          icon: Icon(Icons.delete), onPressed: () => _delete(context)));
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+            widget._profile.id == null ? 'Add new profile' : 'Edit profile'),
+        actions: actions,
+      ),
+      body: Form(
+        key: _formKey,
+        child: LayoutBuilder(
+            builder: (ctx, box) => ListView(
+                  children: items
+                      .map((e) =>
+                          Padding(padding: EdgeInsets.all(8.0), child: e))
+                      .toList(),
+                  padding: EdgeInsets.only(bottom: 80.0),
+                )),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _save(context),
+        child: Icon(Icons.done),
       ),
     );
   }

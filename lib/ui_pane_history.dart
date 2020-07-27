@@ -312,7 +312,10 @@ class HistoryPane extends MainPaneState {
     final theme = Theme.of(ctx).primaryTextTheme;
     final profile = _profiles[item.profileID];
     final bottomRow = <Widget>[
-      profileIcon(profile),
+      Padding(
+        padding: EdgeInsets.only(right: 4.0),
+        child: profileIcon(profile),
+      ),
       Text(
         profile?.title ?? '?',
         softWrap: false,

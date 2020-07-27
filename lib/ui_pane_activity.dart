@@ -309,7 +309,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     Widget appBarBottom;
     Widget body = Container();
     if (item != null) {
-      print('Laps: ${_lapsCount(item)}');
+//      print('Laps: ${_lapsCount(item)}');
       if (_tabInfo.length > 1) {
         // Render lap info
         final tabs = _tabInfo
@@ -333,9 +333,21 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         child: CircularProgressIndicator(),
       );
     }
+    Widget title = Text('Loading...');
+    if (item != null && _profile != null) {
+      title = Row(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(right: 4.0),
+            child: profileIcon(_profile),
+          ),
+          Text(item.smartTitle())
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
-        title: Text(item?.smartTitle() ?? 'Loading...'),
+        title: title,
         actions: [
           dotsMenu(
               context,

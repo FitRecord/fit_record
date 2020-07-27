@@ -157,13 +157,25 @@ class RecordPane extends MainPaneState {
             _profile.screensJson.map((e) => _buildScreen(ctx, e)).toList(),
       );
     }
+    final profileTitle =
+        profileInfo(_profile, Theme.of(ctx).primaryTextTheme.headline6);
     final sensors =
         sensorsStatus != null ? _buildSensors(ctx, sensorsStatus) : Container();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.max,
       children: [
-        sensors,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Padding(
+              padding: EdgeInsets.all(12.0),
+              child: profileTitle,
+            ),
+            Spacer(),
+            sensors
+          ],
+        ),
         Expanded(child: screens),
         Row(
           children: buttons,
@@ -174,16 +186,12 @@ class RecordPane extends MainPaneState {
 
   Widget _buildIdle(BuildContext ctx) {
     if (_profiles == null) return Container();
-    final dropDown = DropdownButton<Profile>(
-        value: _profile,
-        items: _profiles.map((e) {
-          return DropdownMenuItem(
-              value: e,
-              child: Row(
-                children: [profileIcon(e), Text(e.title)],
-              ));
-        }).toList(),
-        onChanged: (p) => setState(() => _profile = p));
+    final dropDown = profileDropdown(
+      _profiles,
+      _profile,
+      Theme.of(ctx).primaryTextTheme.headline6,
+      (value) => setState(() => _profile = value),
+    );
     final readyButton = _bottomButton(
         Icons.timer, 'Get ready', Colors.green, () => _getReady(ctx));
     return Column(
