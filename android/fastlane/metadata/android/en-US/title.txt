@@ -1,1 +1,1 @@
-FitRecord - running/cycling GPS tracker
+FitRecord: Running/cycling GPS tracker
