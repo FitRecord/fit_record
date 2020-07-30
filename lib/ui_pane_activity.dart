@@ -1,7 +1,8 @@
 import 'dart:collection';
 
 import 'package:android/data_provider.dart';
-import 'package:android/data_storage.dart';
+import 'package:android/data_storage_profiles.dart';
+import 'package:android/data_storage_records.dart';
 import 'package:android/ui_utils.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';

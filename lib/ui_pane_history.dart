@@ -1,7 +1,8 @@
 import 'dart:collection';
 
 import 'package:android/data_provider.dart';
-import 'package:android/data_storage.dart';
+import 'package:android/data_storage_profiles.dart';
+import 'package:android/data_storage_records.dart';
 import 'package:android/ui_main.dart';
 import 'package:android/ui_pane_activity.dart';
 import 'package:android/ui_utils.dart';

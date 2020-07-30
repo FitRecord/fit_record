@@ -1,7 +1,8 @@
 import 'dart:collection';
 import 'dart:math';
 
-import 'package:android/data_storage.dart';
+import 'package:android/data_storage_profiles.dart';
+import 'package:android/data_storage_records.dart';
 import 'package:android/ui_utils.dart';
 
 abstract class SensorHandler {

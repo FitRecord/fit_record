@@ -2,7 +2,7 @@ import 'dart:collection';
 
 import 'package:android/data_provider.dart';
 import 'package:android/data_sensor.dart';
-import 'package:android/data_storage.dart';
+import 'package:android/data_storage_profiles.dart';
 import 'package:android/ui_dialog_sensors.dart';
 import 'package:android/ui_main.dart';
 import 'package:android/ui_utils.dart';
