@@ -6,10 +6,10 @@ import 'package:android/ui_utils.dart';
 
 abstract class SensorHandler {
   Map<String, double> handleData(Profile profile, Map<String, double> data,
-      List<Trackpoint> trackpoints, Map<String, double> cache);
+      Iterable<Trackpoint> trackpoints, Map<String, double> cache);
 
-  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache);
-  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache);
+  void handlePause(Iterable<Trackpoint> trackpoints, Map<String, double> cache);
+  void handleLap(Iterable<Trackpoint> trackpoints, Map<String, double> cache);
 
   Trackpoint _last(Iterable<Trackpoint> list) =>
       list?.isNotEmpty == true ? list.last : null;
@@ -51,13 +51,14 @@ class TimeSensorHandler extends SensorHandler {
   }
 
   @override
-  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache) {
+  void handleLap(Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     cache['time_lap'] = 0;
     cache['time_lap_index'] = (cache['time_lap_index'] ?? 0) + 1;
   }
 
   @override
-  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache) {
+  void handlePause(
+      Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     // TODO: implement handlePause
   }
 }
@@ -84,7 +85,7 @@ class LocationSensorHandler extends SensorHandler {
 
   @override
   Map<String, double> handleData(Profile profile, Map<String, double> data,
-      List<Trackpoint> trackpoints, Map<String, double> cache) {
+      Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     final result = new Map<String, double>();
     final _copyFromCache = (List<String> keys) =>
         keys.forEach((element) => result[element] = cache[element]);
@@ -105,7 +106,7 @@ class LocationSensorHandler extends SensorHandler {
       time = (data['ts'] ?? 0) - (lastData['ts'] ?? 0);
     }
     Map lastLoc = data;
-    trackpoints?.reversed?.take(30)?.forEach((tp) {
+    trackpoints?.toList()?.reversed?.forEach((tp) {
       final loc = tp.data['location'];
       lastDistance += _distance(lastLoc, loc);
       lastTime += (lastLoc['ts'] - loc['ts']);
@@ -151,14 +152,15 @@ class LocationSensorHandler extends SensorHandler {
   }
 
   @override
-  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache) {
+  void handleLap(Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     cache['loc_lap_time'] = 0;
     cache['loc_lap_distance'] = 0;
     cache['loc_lap_altitude_delta'] = 0;
   }
 
   @override
-  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache) {
+  void handlePause(
+      Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     // TODO: implement handlePause
   }
 }
@@ -166,7 +168,7 @@ class LocationSensorHandler extends SensorHandler {
 class ConnectedSensorHandler extends SensorHandler {
   @override
   Map<String, double> handleData(Profile profile, Map<String, double> data,
-      List<Trackpoint> trackpoints, Map<String, double> cache) {
+      Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     final result = new Map<String, double>();
     final _incCache =
         (String key, double value) => cache[key] = (cache[key] ?? 0) + value;
@@ -218,7 +220,7 @@ class ConnectedSensorHandler extends SensorHandler {
   }
 
   @override
-  void handleLap(List<Trackpoint> trackpoints, Map<String, double> cache) {
+  void handleLap(Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     final _clearLapCache = (String key) {
       [
         '${key}_lap_times',
@@ -236,7 +238,8 @@ class ConnectedSensorHandler extends SensorHandler {
   }
 
   @override
-  void handlePause(List<Trackpoint> trackpoints, Map<String, double> cache) {
+  void handlePause(
+      Iterable<Trackpoint> trackpoints, Map<String, double> cache) {
     // TODO: implement handlePause
   }
 }

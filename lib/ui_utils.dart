@@ -336,7 +336,7 @@ ChartSeries chartsMake(
   IndicatorValue indicator, {
   String renderer,
   String axisID,
-  int smooth = 10,
+  int smooth = 5,
   double zoom,
   double average,
   List<Map<String, double>> zones,

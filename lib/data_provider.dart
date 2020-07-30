@@ -148,9 +148,9 @@ class DataProvider {
             final sensors =
                 await provider.records.sensorStatus(args, provider.indicators);
             return {
-              'data': sensorsData.data,
+              'data': sensorsData?.data,
               'status': sensors,
-              'status_text': sensorsData.status
+              'status_text': sensorsData?.status
             };
           }();
         case 'export':

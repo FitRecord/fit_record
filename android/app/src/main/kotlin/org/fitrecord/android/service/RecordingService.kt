@@ -134,12 +134,11 @@ class RecordingService : ConnectableService() {
             })
         }
         selectedProfile = profileId
-        val n = updateWithStatus(null, null)
+        val n = updateWithStatus(null, "FitRecord")
         startForeground(FOREGROUND_NOTIFICATION, n)
     }
 
-    private fun updateWithStatus(status: Int?, text: String?): Notification {
-        val text = text ?: "FitRecord is ready"
+    private fun updateWithStatus(status: Int?, text: String): Notification {
         when (status) {
             0 -> {
                 return updateNotification("Recording", text, R.drawable.ic_notification_record) {
@@ -193,7 +192,8 @@ class RecordingService : ConnectableService() {
                                         deactivate()
                                     }
                                 } else idleCount = 0
-                                updateWithStatus(status, data["status_text"] as String?)
+                                val statusText = data["status_text"] as String?
+                                statusText?.let { updateWithStatus(status, it) }
                             }
                             it.onSensorStatus(data["status"] as List<Map<String, Int?>>)
                         }

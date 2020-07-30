@@ -26,6 +26,8 @@ class Profile {
   static List<String> types = ['Running', 'Cycling', 'Skiing', 'Swimming'];
   static List<String> icons = ['run', 'bike', 'walk', 'row'];
 
+  num get maxTrackpoints => 20;
+
   List<Map<String, double>> _zonesJson(String key, String value) {
     try {
       Map checks = configJson['zones'];
@@ -111,9 +113,10 @@ class Profile {
 
   String makeStatusText(
       SensorIndicatorManager sensors, Map<String, double> data) {
-    final time = sensors.formatFor('time_total', data);
-    final distance = sensors.formatFor('loc_total_distance', data);
-    return 'Time: $time, distance: ${distance} km';
+    final time = sensors.formatFor('time_total', data, withType: true);
+    final distance =
+        sensors.formatFor('loc_total_distance', data, withType: true);
+    return 'Time: $time, distance: ${distance}';
   }
 }
 
@@ -177,7 +180,7 @@ class RecordStorage extends DatabaseStorage {
   RecordStorage([ChannelDbDelegate delegate]) : super(2, delegate);
 
   Map<String, double> cache;
-  List<Trackpoint> trackpoints;
+  Queue<Trackpoint> trackpoints;
 
   Record _toRecord(Map<String, dynamic> row) {
     final r = Record(row['id'], row['uid'], row['profile_id'], row['started'],
@@ -279,13 +282,14 @@ class RecordStorage extends DatabaseStorage {
 
   Future<SensorsDataResult> sensorsData(
       Map args, SensorIndicatorManager sensors, ProfileStorage profiles) async {
+    var statusText = 'FitRecord is ready';
     final record = await active();
     final profile = await profiles.one(record?.profileID);
     final data = Map<String, double>();
     if (record != null) data['status'] = record.status.toDouble();
     if (trackpoints == null && record != null) {
       cache = Map<String, double>();
-      trackpoints = <Trackpoint>[];
+      trackpoints = DoubleLinkedQueue<Trackpoint>();
       final list = await loadTrackpoints(record);
       _processTrackpoints(
           profile, sensors, list, cache, trackpoints, null, null);
@@ -294,28 +298,32 @@ class RecordStorage extends DatabaseStorage {
     final ts = args.values
         .map((e) => e['ts']?.toInt())
         .firstWhere((el) => el != null, orElse: () => null);
-    final dataUpdated = (ts == null ||
-            trackpoints?.isEmpty != false ||
-            trackpoints.last.timestamp < ts) &&
-        record?.status == 0;
+    final dataUpdated = ts == null ||
+        trackpoints?.isEmpty != false ||
+        trackpoints.last.timestamp < ts;
+    if (!dataUpdated) return null;
     args.forEach((key, value) {
       final sensorData = (value as Map)
           .map((key, value) => MapEntry<String, double>(key, value));
-      final handlerData = sensors.handler(key).handleData(
-          profile, sensorData, dataUpdated ? trackpoints : null, cache);
+      final handlerData = sensors
+          .handler(key)
+          .handleData(profile, sensorData, trackpoints, cache);
       data.addAll(handlerData);
     });
-    if (dataUpdated) {
+    if (record?.status == 0) {
       // recording is active
       final newTrackpoint = await _addTrackpoint(record, ts, args, 0);
-      trackpoints.add(newTrackpoint);
+      _appendTrackpoint(profile, trackpoints, newTrackpoint);
     }
-    String statusText;
-    if (record != null) {
-      final profile = await profiles.one(record.profileID);
-      if (profile != null) statusText = profile.makeStatusText(sensors, data);
-    }
+    if (profile != null) statusText = profile.makeStatusText(sensors, data);
     return SensorsDataResult(data, statusText);
+  }
+
+  _appendTrackpoint(
+      Profile profile, Queue<Trackpoint> trackpoints, Trackpoint trackpoint) {
+    while (trackpoints.length >= profile.maxTrackpoints)
+      trackpoints.removeFirst();
+    trackpoints.add(trackpoint);
   }
 
   @override
@@ -501,7 +509,7 @@ class RecordStorage extends DatabaseStorage {
       SensorIndicatorManager sensors,
       List<Trackpoint> list,
       Map<String, double> cache,
-      List<Trackpoint> trackpoints,
+      Queue<Trackpoint> trackpoints,
       List<int> laps,
       List<Map<String, double>> results) {
     list.forEach((element) {
@@ -528,7 +536,7 @@ class RecordStorage extends DatabaseStorage {
           data.addAll(handlerData);
         });
         results?.add(data);
-        trackpoints.add(element);
+        _appendTrackpoint(profile, trackpoints, element);
       }
     });
   }
@@ -566,7 +574,7 @@ class RecordStorage extends DatabaseStorage {
     item.laps = <int>[];
     final tps = await loadTrackpoints(item);
     final cache = Map<String, double>();
-    final trackpoints = <Trackpoint>[];
+    final trackpoints = DoubleLinkedQueue<Trackpoint>();
     _processTrackpoints(
         profile, sensors, tps, cache, trackpoints, item.laps, item.trackpoints);
     if (item.metaJson == null) {
