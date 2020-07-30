@@ -1,0 +1,25 @@
+**The application is under developments and not all features are available and/or stable**
+
+The ultimate goal is to create the best GPS/Sensors tracking application for runners/cyclist/other sports
+
+Features:
+
+- Record running activities using phone GPS and BLE sensors
+- Configure screens with indicators
+- Connect BLE heart rate and power sensors
+- Browse activity history
+- See activity details and graphs
+- Add activities manually
+- Show weekly/monthly/annual activity statistics
+Plans:
+- Display activity map
+- Support more sensors
+- Export/synchronize activities with popular services (Strava and so on)
+- Intervals/workout plans and goals
+- Audio cues using text-to-speech
+- Wear OS companion App
+- Many more
+
+Application stores all your data locally and doesn't have advertisements/tracking/subscriptions
+
+Source code is available and contributions are very welcome
