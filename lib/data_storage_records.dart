@@ -18,6 +18,8 @@ class Trackpoint {
   Trackpoint(this.timestamp, this.status, this.data);
 }
 
+double _defaultExtractor(Map<String, double> map, String key) => map[key];
+
 class Record {
   final int id, started, profileID, status;
   final String uid;
@@ -40,18 +42,21 @@ class Record {
         dateTimeFormat().format(DateTime.fromMillisecondsSinceEpoch(started));
   }
 
-  Map<int, double> extractData(String key, int from, int to) {
+  Map<int, T> extractData<T>(String key, int from, int to,
+      T Function(Map<String, double>, String) extract) {
     if (trackpoints?.isNotEmpty != true) return null;
-    if (trackpoints.last[key] == null) return null;
     if (to == null) to = trackpoints.length - 1;
     if (from > to) return null;
 
     double start = trackpoints[from]['time_total'];
-    return LinkedHashMap.fromEntries(
-        trackpoints.getRange(from, to + 1).map((e) {
-      return MapEntry<int, double>(
-          ((e['time_total'] - start) / 1000).round(), e[key]);
+    final result =
+        LinkedHashMap.fromEntries(trackpoints.getRange(from, to + 1).map((e) {
+      return MapEntry<int, T>(
+          ((e['time_total'] - start) / 1000).round(), extract(e, key));
     }));
+    if (result.values.firstWhere((el) => el != null, orElse: () => null) ==
+        null) return null;
+    return result;
   }
 }
 

@@ -92,7 +92,9 @@ class LocationSensorHandler extends SensorHandler {
         keys.forEach((element) => result[element] = cache[element]);
     final _incCache =
         (String key, double value) => cache[key] = (cache[key] ?? 0) + value;
-    result['loc_altitude'] = data['altitude'];
+    ['altitude', 'latitude', 'longitude'].forEach((element) {
+      if (data.containsKey(element)) result['loc_$element'] = data[element];
+    });
     if (cache == null) return result;
     final last = _last(trackpoints);
     double distance = 0,

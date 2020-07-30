@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math';
 
 import 'package:android/data_provider.dart';
 import 'package:android/data_storage_profiles.dart';
@@ -6,6 +7,8 @@ import 'package:android/data_storage_records.dart';
 import 'package:android/ui_utils.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong/latlong.dart';
 
 class RecordDetailsPane extends StatefulWidget {
   final DataProvider provider;
@@ -27,9 +30,25 @@ class _TabInfo {
   final Map<String, double> _row;
   final ChartSeries _altitude, _pace, _hrm, _power, _cadence;
   final List<charts.TickSpec> _ticks;
-
+  final Polyline _path;
+  final Polyline _subPath;
+  LatLngBounds _bounds;
   _TabInfo(this._lap, this._row, this._altitude, this._pace, this._hrm,
-      this._power, this._cadence, this._ticks);
+      this._power, this._cadence, this._ticks, this._path, this._subPath) {
+    if (_path != null) {
+      double latMin = _path.points.first.latitude;
+      double lonMin = _path.points.first.longitude;
+      double latMax = latMin;
+      double lonMax = lonMin;
+      _path.points.forEach((p) {
+        latMin = min(latMin, p.latitude);
+        lonMin = min(lonMin, p.longitude);
+        latMax = max(latMax, p.latitude);
+        lonMax = max(lonMax, p.longitude);
+      });
+      _bounds = LatLngBounds(LatLng(latMin, lonMin), LatLng(latMax, lonMax));
+    }
+  }
 
   String scope() => _lap == 0 ? 'total' : 'lap';
 }
@@ -45,10 +64,17 @@ class _RecordDetailsState extends State<RecordDetailsPane>
 
   int _lapsCount(Record record) => (record?.laps?.length ?? 0) + 1;
 
+  LatLng _extractPoint(map, key) {
+    final lat = map['loc_latitude'];
+    final lon = map['loc_longitude'];
+    if (lat != null && lon != null) return LatLng(lat, lon);
+    return null;
+  }
+
   List<_TabInfo> _loadTabs(BuildContext ctx, Profile profile, Record item) {
     if (item.trackpoints.isEmpty) return null;
     final result = <_TabInfo>[];
-    _TabInfo _buildOne(int lap, int from, int to) {
+    _TabInfo _buildOne(int lap, int from, int to, _TabInfo total) {
       final scope = to != null ? 'lap' : 'total';
       final row = to != null ? item.trackpoints[to] : item.trackpoints.last;
       final first = item.trackpoints[from];
@@ -63,24 +89,45 @@ class _RecordDetailsState extends State<RecordDetailsPane>
           charts.TickSpec(totalTime, label: formatDurationSeconds(totalTime)));
 
       final indicator = profile.speedIndicator();
-      final altitude =
-          _altitudeSeries(ctx, item.extractData('loc_altitude', from, to));
-      final pace = _paceSpeedSeries(
-          ctx, indicator, profile, item.extractData(indicator, from, to),
+      final altitude = _altitudeSeries(ctx,
+          item.extractData('loc_altitude', from, to, (map, key) => map[key]));
+      final pace = _paceSpeedSeries(ctx, indicator, profile,
+          item.extractData(indicator, from, to, (map, key) => map[key]),
           average: row['loc_${scope}_${indicator}']);
-      final hrm = _hrmSeries(
-          ctx, profile, item.extractData('sensor_hrm', from, to),
+      final hrm = _hrmSeries(ctx, profile,
+          item.extractData('sensor_hrm', from, to, (map, key) => map[key]),
           average: row['sensor_hrm_${scope}_avg']);
-      final cadence = _cadenceSeries(
-          ctx, item.extractData('sensor_cadence', from, to),
+      final cadence = _cadenceSeries(ctx,
+          item.extractData('sensor_cadence', from, to, (map, key) => map[key]),
           average: row['sensor_cadence_${scope}_avg']);
-      final power = _powerSeries(
-          ctx, profile, item.extractData('sensor_power', from, to),
+      final power = _powerSeries(ctx, profile,
+          item.extractData('sensor_power', from, to, (map, key) => map[key]),
           average: row['sensor_power_${scope}_avg']);
-      return _TabInfo(lap, row, altitude, pace, hrm, power, cadence, timeTicks);
+      final pathData = item
+          .extractData('', from, to, _extractPoint)
+          ?.values
+          ?.where((element) => element != null);
+      Polyline polyline;
+      if (pathData?.isNotEmpty == true) {
+        polyline = Polyline(
+            points: pathData.toList(),
+            strokeWidth: 3.0,
+            color: total != null ? Colors.blue : Colors.red);
+      }
+      return _TabInfo(
+          lap,
+          row,
+          altitude,
+          pace,
+          hrm,
+          power,
+          cadence,
+          timeTicks,
+          total != null ? total._path : polyline,
+          total != null ? polyline : null);
     }
 
-    final total = _buildOne(0, 0, null);
+    final total = _buildOne(0, 0, null, null);
     result.add(total);
     final lapCount = _lapsCount(item);
     if (lapCount > 1) {
@@ -89,7 +136,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         final startIndex = lap > 1 ? item.laps[lap - 1] + 1 : 0;
         final endIndex =
             lap < lapCount - 1 ? item.laps[lap] : item.trackpoints.length - 1;
-        result.add(_buildOne(lap + 1, startIndex, endIndex));
+        result.add(_buildOne(lap + 1, startIndex, endIndex, total));
       });
     }
     return result;
@@ -288,6 +335,10 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       listItems.add(_buildOverview(context, record, tab));
     } else {
       listItems.add(_buildOverview(context, record, tab));
+    }
+    if (tab._path != null) {
+      listItems
+          .add(mapRenderInteractive([tab._path, tab._subPath], tab._bounds));
     }
     if (tab._row.containsKey('sensor_hrm')) {
       listItems.add(_buildHrm(ctx, record, tab));

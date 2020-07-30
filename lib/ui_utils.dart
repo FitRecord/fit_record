@@ -2,6 +2,7 @@ import 'package:android/data_sensor.dart';
 import 'package:android/data_storage_profiles.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 
 String formatDurationSeconds(int value, {bool withHour = false}) {
@@ -542,4 +543,29 @@ MaterialColor zoneColor(int zone) {
     case 4:
       return Colors.red;
   }
+}
+
+TileLayerOptions _osmTiles() => TileLayerOptions(
+    urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    subdomains: ['a', 'b', 'c']);
+
+Widget mapRenderInteractive(List<Polyline> polylines, LatLngBounds bounds) {
+  final map = FlutterMap(
+    options: MapOptions(
+      bounds: bounds,
+      boundsOptions: FitBoundsOptions(padding: EdgeInsets.all(16.0)),
+    ),
+    layers: [
+      _osmTiles(),
+      PolylineLayerOptions(
+          polylines: polylines.where((element) => element != null).toList(),
+          polylineCulling: true),
+    ],
+  );
+  return AspectRatio(
+      aspectRatio: 1.0,
+      child: Padding(
+        padding: EdgeInsets.all(4.0),
+        child: map,
+      ));
 }
