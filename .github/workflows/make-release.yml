@@ -30,6 +30,7 @@ jobs:
           ORG_GRADLE_PROJECT_ndkVersion: ${{ steps.set_env.outputs.NDK_VERSION }}
         run: ~/.flutter_dist/bin/flutter build appbundle --build-name=${{ steps.set_env.outputs.SOURCE_TAG }} --build-number=${{ steps.set_env.outputs.BUILD_NUMBER }}
       - name: Deploy to Play Store internal track using Fastlane
+        uses: maierj/fastlane-action@v1.4.0
         env:
           SUPPLY_PACKAGE_NAME: org.fitrecord.android.release
           SUPPLY_VERSION_NAME: ${{ steps.set_env.outputs.SOURCE_TAG }}
@@ -37,10 +38,9 @@ jobs:
           SUPPLY_TRACK: internal
           SUPPLY_JSON_KEY_DATA: ${{ secrets.PLAY_STORE_KEY_JSON }}
           SUPPLY_AAB: ../build/app/outputs/bundle/release/app-release.aab
-        run: |
-          cd android
-          bundle update
-          bundle exec fastlane deploy
+        with:
+          lane: deploy
+          subdirectory: android
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.1.1
