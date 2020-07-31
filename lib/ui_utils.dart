@@ -549,11 +549,18 @@ TileLayerOptions _osmTiles() => TileLayerOptions(
     urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     subdomains: ['a', 'b', 'c']);
 
-Widget mapRenderInteractive(List<Polyline> polylines, LatLngBounds bounds) {
+Widget mapRenderInteractive(BuildContext ctx, MapController mapCtrl,
+    List<Polyline> polylines, LatLngBounds bounds,
+    {bool zoom = true,
+    bool fit = true,
+    bool fullscreen = true,
+    bool square = true}) {
+  final boundOpts = FitBoundsOptions(padding: EdgeInsets.all(16.0));
   final map = FlutterMap(
+    mapController: mapCtrl,
     options: MapOptions(
       bounds: bounds,
-      boundsOptions: FitBoundsOptions(padding: EdgeInsets.all(16.0)),
+      boundsOptions: boundOpts,
     ),
     layers: [
       _osmTiles(),
@@ -562,10 +569,84 @@ Widget mapRenderInteractive(List<Polyline> polylines, LatLngBounds bounds) {
           polylineCulling: true),
     ],
   );
-  return AspectRatio(
+  final zoomLayer = Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      fullscreen
+          ? IconButton(
+              onPressed: () => _FullscreenMap.open(ctx, polylines, bounds),
+              icon: Icon(Icons.fullscreen),
+            )
+          : null,
+      fit
+          ? IconButton(
+              onPressed: () => mapCtrl.fitBounds(bounds, options: boundOpts),
+              icon: Icon(Icons.location_searching),
+            )
+          : null,
+      zoom
+          ? IconButton(
+              onPressed: () => mapCtrl.move(mapCtrl.center, mapCtrl.zoom + 1),
+              icon: Icon(Icons.zoom_in),
+            )
+          : null,
+      zoom
+          ? IconButton(
+              onPressed: () => mapCtrl.move(mapCtrl.center, mapCtrl.zoom - 1),
+              icon: Icon(Icons.zoom_out),
+            )
+          : null,
+    ]
+        .where((e) => e != null)
+        .map((e) => Container(
+              color: Colors.grey.withOpacity(0.5),
+              child: e,
+            ))
+        .toList(),
+  );
+  final stack = Stack(
+    children: [
+      map,
+      Padding(
+        padding: EdgeInsets.all(8.0),
+        child: zoomLayer,
+      ),
+    ],
+    alignment: AlignmentDirectional.bottomEnd,
+  );
+  if (square)
+    return AspectRatio(
       aspectRatio: 1.0,
       child: Padding(
         padding: EdgeInsets.all(4.0),
-        child: map,
-      ));
+        child: stack,
+      ),
+    );
+  return stack;
+}
+
+class _FullscreenMap extends StatelessWidget {
+  final List<Polyline> _polylines;
+  final LatLngBounds _bounds;
+  final _mapCtrl = MapController();
+
+  _FullscreenMap(this._polylines, this._bounds);
+
+  static Future open(
+      BuildContext ctx, List<Polyline> _polylines, LatLngBounds _bounds) async {
+    return Navigator.push(
+        ctx,
+        MaterialPageRoute(
+          builder: (ctx) => _FullscreenMap(_polylines, _bounds),
+          fullscreenDialog: true,
+        ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: mapRenderInteractive(context, _mapCtrl, _polylines, _bounds,
+          fullscreen: false, square: false),
+    );
+  }
 }

@@ -33,6 +33,7 @@ class _TabInfo {
   final Polyline _path;
   final Polyline _subPath;
   LatLngBounds _bounds;
+  MapController _map;
   _TabInfo(this._lap, this._row, this._altitude, this._pace, this._hrm,
       this._power, this._cadence, this._ticks, this._path, this._subPath) {
     if (_path != null) {
@@ -47,6 +48,7 @@ class _TabInfo {
         lonMax = max(lonMax, p.longitude);
       });
       _bounds = LatLngBounds(LatLng(latMin, lonMin), LatLng(latMax, lonMax));
+      _map = MapController();
     }
   }
 
@@ -337,8 +339,9 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       listItems.add(_buildOverview(context, record, tab));
     }
     if (tab._path != null) {
-      listItems
-          .add(mapRenderInteractive([tab._path, tab._subPath], tab._bounds));
+      final map = mapRenderInteractive(
+          ctx, tab._map, [tab._path, tab._subPath], tab._bounds);
+      listItems.add(map);
     }
     if (tab._row.containsKey('sensor_hrm')) {
       listItems.add(_buildHrm(ctx, record, tab));
