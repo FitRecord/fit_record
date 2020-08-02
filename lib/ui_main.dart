@@ -2,6 +2,7 @@ import 'package:android/data_provider.dart';
 import 'package:android/ui_pane_history.dart';
 import 'package:android/ui_pane_profiles.dart';
 import 'package:android/ui_pane_record.dart';
+import 'package:android/ui_pane_sync.dart';
 import 'package:flutter/material.dart';
 
 class MainPane<T extends MainPaneState> extends StatefulWidget {
@@ -47,11 +48,13 @@ class MainViewState extends State<MainView> {
           icon: Icon(Icons.history), title: Text('History')),
       BottomNavigationBarItem(
           icon: Icon(Icons.directions_run), title: Text('Profiles')),
+      BottomNavigationBarItem(icon: Icon(Icons.sync), title: Text('Sync')),
     ];
     final bottom = BottomNavigationBar(
       currentIndex: _selectedView,
       items: items,
       onTap: _selectView,
+      type: BottomNavigationBarType.fixed,
     );
     switch (_selectedView) {
       case 0:
@@ -60,6 +63,8 @@ class MainViewState extends State<MainView> {
         return MainPane(widget._dataProvider, bottom, () => HistoryPane());
       case 2:
         return MainPane(widget._dataProvider, bottom, () => ProfilesPane());
+      case 3:
+        return MainPane(widget._dataProvider, bottom, () => SyncPane());
     }
     return null;
   }

@@ -90,8 +90,8 @@ class HistoryPane extends MainPaneState {
   }
 
   Widget _buildChart(BuildContext ctx, HistoryResult data) {
-    final textColor = charts.ColorUtil.fromDartColor(
-        Theme.of(ctx).primaryTextTheme.bodyText1.color);
+    final textColor =
+        charts.ColorUtil.fromDartColor(Theme.of(ctx).textTheme.bodyText1.color);
     double max = 0;
     data.keyStats.values.forEach((el) {
       if (el != null && el > max) max = el;
@@ -488,16 +488,13 @@ class _RecordEditorState extends State<_RecordEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final textStyle = Theme.of(context).textTheme.bodyText1;
     Widget body = Container();
     if (_profiles != null) {
       final dropDown = DropdownButtonFormField<Profile>(
           value: _profile,
           items: _profiles.map((e) {
-            return DropdownMenuItem(
-                value: e,
-                child: Row(
-                  children: [profileIcon(e), Text(e.title)],
-                ));
+            return DropdownMenuItem(value: e, child: profileInfo(e, textStyle));
           }).toList(),
           onChanged: (p) => setState(() => _profile = p));
       final items = <Widget>[

@@ -149,6 +149,8 @@ class RecordPane extends MainPaneState {
             child: _bottomButton(
                 Icons.play_arrow, 'Resume', Colors.green, () => _start(ctx))));
         break;
+      case RecordState.Idle:
+        break;
     }
     Widget screens = Container();
     if (sensorsData != null && _profile != null) {
@@ -158,7 +160,7 @@ class RecordPane extends MainPaneState {
       );
     }
     final profileTitle =
-        profileInfo(_profile, Theme.of(ctx).primaryTextTheme.headline6);
+        profileInfo(_profile, Theme.of(ctx).textTheme.headline6);
     final sensors =
         sensorsStatus != null ? _buildSensors(ctx, sensorsStatus) : Container();
     return Column(
@@ -189,7 +191,7 @@ class RecordPane extends MainPaneState {
     final dropDown = profileDropdown(
       _profiles,
       _profile,
-      Theme.of(ctx).primaryTextTheme.headline6,
+      Theme.of(ctx).textTheme.headline6,
       (value) => setState(() => _profile = value),
     );
     final readyButton = _bottomButton(

@@ -60,9 +60,11 @@ class _RecordDetailsState extends State<RecordDetailsPane>
   Record _record;
   Profile _profile;
   List<_TabInfo> _tabInfo;
+  List<SyncConfig> _syncConfigs;
   final titleEditor = TextEditingController();
   final descritptionEditor = TextEditingController();
   TabController lapTabs;
+  bool _syncing = false;
 
   int _lapsCount(Record record) => (record?.laps?.length ?? 0) + 1;
 
@@ -150,6 +152,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
           widget.provider.indicators, widget.provider.profiles, widget.id);
       final profile = await widget.provider.profiles.one(item.profileID);
       final _tabs = _loadTabs(ctx, profile, item);
+      final syncConfigs = await widget.provider.sync.all();
       setState(() {
         _record = item;
         _profile = profile;
@@ -157,6 +160,7 @@ class _RecordDetailsState extends State<RecordDetailsPane>
         descritptionEditor.text = item.description ?? '';
         lapTabs = TabController(length: _lapsCount(item) + 1, vsync: this);
         _tabInfo = _tabs;
+        _syncConfigs = syncConfigs;
       });
     } catch (e) {
       print('Error loading record: $e');
@@ -358,6 +362,21 @@ class _RecordDetailsState extends State<RecordDetailsPane>
     );
   }
 
+  Future _sync(BuildContext ctx, SyncConfig config) async {
+    try {
+      setState(() => _syncing = true);
+      await widget.provider.sync
+          .upload(widget.provider, _record, _profile, config);
+      setState(() => null);
+    } catch (e) {
+      print('_sync error: $e');
+      showMessage(ctx, 'Something is not good');
+//      rethrow;
+    } finally {
+      setState(() => _syncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = _record;
@@ -396,24 +415,53 @@ class _RecordDetailsState extends State<RecordDetailsPane>
             padding: EdgeInsets.only(right: 4.0),
             child: profileIcon(_profile),
           ),
-          Text(item.smartTitle())
+          Expanded(
+            child: Text(
+              item.smartTitle(),
+            ),
+          )
         ],
+      );
+    }
+    Widget syncMenu;
+    if (_syncConfigs?.isNotEmpty == true) {
+      syncMenu = PopupMenuButton<SyncConfig>(
+        icon: Icon(Icons.sync),
+        onSelected: (item) => _sync(context, item),
+        itemBuilder: (ctx) => _syncConfigs
+            .map((e) => PopupMenuItem<SyncConfig>(
+                  child: ListTile(
+                    trailing: Checkbox(
+                        value: _record.syncJson[e.id.toString()] != null,
+                        onChanged: null),
+                    title: Text(e.title),
+                  ),
+                  value: e,
+                ))
+            .toList(),
+      );
+    }
+    if (_syncing) {
+      body = Stack(
+        children: [body, CircularProgressIndicator()],
+        alignment: Alignment.center,
       );
     }
     return Scaffold(
       appBar: AppBar(
         title: title,
         actions: [
+          syncMenu,
           dotsMenu(
               context,
-              LinkedHashMap.fromIterables([
-                'TCX Export',
-                'Delete'
-              ], [
-                () => _exportRecord(context, widget.id, 'tcx'),
-                () => _deleteRecord(context, widget.id)
-              ]))
-        ],
+              LinkedHashMap.fromIterables(
+                ['TCX Export', 'Delete'],
+                [
+                  () => _exportRecord(context, widget.id, 'tcx'),
+                  () => _deleteRecord(context, widget.id)
+                ],
+              ))
+        ].where((e) => e != null).toList(),
         bottom: appBarBottom,
       ),
       body: body,

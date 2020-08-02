@@ -31,3 +31,10 @@ dev_dependencies:
 flutter:
 
   uses-material-design: true
+  fonts:
+    - family: SportIcons
+      fonts:
+        - asset: fonts/SportIcons.ttf
+    - family: SyncLogo
+      fonts:
+        - asset: fonts/SyncLogo.ttf

@@ -81,7 +81,7 @@ class TCXExport extends Exporter {
             [xmlAttr("xmlns", TCD_NS), xmlAttr("xmlns:tcx", TCX_NS)], false),
         XmlStartElementEvent('Activities', const [], false),
         XmlStartElementEvent(
-            'Activity', [xmlAttr('Sport', profile.type)], false),
+            'Activity', [xmlAttr('Sport', profile.type.toString())], false),
       ];
       // <XML><TCD><Acts><Act>
       yield start;
@@ -113,8 +113,9 @@ class TCXExport extends Exporter {
                   children: [xmlElement('Value', hrm.toString())]));
             final cadence = dataValue(tp.data, null, 'cadence');
             if (cadence != null) {
-              items.add(xmlElement('Cadence', cadence.toString()));
-              ext.add(xmlElement('RunCadence', cadence.toString(), ns: "tcx"));
+              final value = (cadence / 2).round().toString();
+              items.add(xmlElement('Cadence', value));
+              ext.add(xmlElement('RunCadence', value, ns: "tcx"));
             }
             final power = dataValue(tp.data, null, 'power');
             if (power != null)
@@ -311,9 +312,12 @@ class ExportManager {
     return null;
   }
 
-  Future exportToFile(Stream<String> export, String path) async {
-    final str = await export.join('');
-    return File(path).writeAsString(str, flush: true);
+  Future<Stream<String>> export(
+      Exporter exporter, DataProvider provider, Record record) async {
+    final profile = await provider.profiles.one(record.profileID);
+    if (profile == null) throw ArgumentError('Invalid profile');
+    final trackpoints = await provider.records.loadTrackpoints(record);
+    return exporter.export(profile, record, trackpoints);
   }
 
   Future<int> importFile(

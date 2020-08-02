@@ -1,5 +1,8 @@
+import 'dart:collection';
+
 import 'package:android/data_sensor.dart';
 import 'package:android/data_storage_profiles.dart';
+import 'package:android/icons_sport.dart';
 import 'package:charts_flutter_cf/charts_flutter_cf.dart' as charts;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -13,9 +16,10 @@ String formatDurationSeconds(int value, {bool withHour = false}) {
   return '${hours}${(min - hour * 60).toString().padLeft(2, '0')}:${(sec - min * 60).toString().padLeft(2, '0')}';
 }
 
-Widget dotsMenu(BuildContext ctx, Map<String, Function()> data) {
+Widget dotsMenu(BuildContext ctx, Map<String, Function()> data,
+    {IconData icon = Icons.more_vert}) {
   return PopupMenuButton(
-      icon: Icon(Icons.more_vert),
+      icon: Icon(icon),
       onSelected: (key) => data[key](),
       itemBuilder: (ctx) => data.keys
           .map((e) => PopupMenuItem<String>(
@@ -28,31 +32,48 @@ Widget dotsMenu(BuildContext ctx, Map<String, Function()> data) {
 IconData profileTypeIcon(String icon) {
   switch (icon) {
     case 'run':
-      return Icons.directions_run;
+      return SportIcons.run;
     case 'bike':
-      return Icons.directions_bike;
-    case 'walk':
-      return Icons.directions_walk;
+      return SportIcons.bicycle;
     case 'row':
-      return Icons.rowing;
+      return SportIcons.row;
+    case 'swim':
+      return SportIcons.swim;
+    case 'ski':
+      return SportIcons.ski;
+    case 'dumbbell':
+      return SportIcons.dumbbell;
+    case 'walk':
+      return SportIcons.walk;
+    case 'hike':
+      return SportIcons.hike;
+    case 'skate':
+      return SportIcons.skate;
+    case 'ski_nordic':
+      return SportIcons.ski_nordic;
+    case 'snowboard':
+      return SportIcons.snowboard;
   }
   return Icons.warning;
 }
 
-Widget profileInfo(Profile profile, TextStyle style) => Row(
+Widget iconWithText(Icon icon, String text, [TextStyle style]) => Row(
       children: [
         Padding(
-          padding: EdgeInsets.only(right: 4.0),
-          child: profileIcon(profile),
+          padding: EdgeInsets.only(right: 12.0),
+          child: icon,
         ),
         Text(
-          profile.title,
+          text,
           style: style,
         )
       ],
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
     );
+
+Widget profileInfo(Profile profile, TextStyle style) =>
+    iconWithText(profileIcon(profile), profile.title, style);
 
 Widget profileDropdown(List<Profile> profiles, Profile selected,
     TextStyle style, Function(Profile) onChanged) {
@@ -67,7 +88,10 @@ Widget profileDropdown(List<Profile> profiles, Profile selected,
       onChanged: (value) => onChanged(value));
 }
 
-Icon profileIcon(Profile profile) => Icon(profileTypeIcon(profile.icon));
+Icon profileIcon(Profile profile) => Icon(
+      profileTypeIcon(profile.icon),
+      size: 24.0,
+    );
 
 Future<bool> yesNoDialog(BuildContext ctx, String title) async {
   var result = await showDialog(
@@ -132,7 +156,7 @@ Widget renderSensors(BuildContext ctx, SensorIndicatorManager sensors,
           padding: EdgeInsets.all(8.0),
           child: Text(
             title,
-            style: Theme.of(ctx).primaryTextTheme.headline5,
+            style: Theme.of(ctx).textTheme.headline5,
           ),
         ));
   }
@@ -213,7 +237,7 @@ Widget renderSensor(BuildContext ctx, double textSize,
       child: Container(
         decoration: BoxDecoration(
             borderRadius: BorderRadius.all(Radius.circular(3)),
-            border: Border.all(color: theme.primaryTextTheme.caption.color)),
+            border: Border.all(color: theme.textTheme.caption.color)),
         child: content,
       ),
     );
@@ -344,8 +368,8 @@ ChartSeries chartsMake(
 }) {
   if (data == null || data.length < 3) return null;
 
-  final textColor = charts.ColorUtil.fromDartColor(
-      Theme.of(ctx).primaryTextTheme.bodyText1.color);
+  final textColor =
+      charts.ColorUtil.fromDartColor(Theme.of(ctx).textTheme.bodyText1.color);
 
   var entries = _smooth(data.entries.toList(), smooth)
       .where((el) => el.value != null)
@@ -480,8 +504,8 @@ Widget chartsMakeChart(
     if (element?.behavior != null)
       annotations.addAll(element.behavior.where((element) => element != null));
   });
-  final textColor = charts.ColorUtil.fromDartColor(
-      Theme.of(ctx).primaryTextTheme.bodyText1.color);
+  final textColor =
+      charts.ColorUtil.fromDartColor(Theme.of(ctx).textTheme.bodyText1.color);
   final chart = charts.LineChart(
     axis,
     animate: false,
@@ -650,3 +674,35 @@ class _FullscreenMap extends StatelessWidget {
     );
   }
 }
+
+Widget formWithItems(BuildContext ctx, List<Widget> items) {
+  return Form(
+    child: LayoutBuilder(
+      builder: (ctx, box) => ListView(
+        padding: EdgeInsets.only(bottom: 80.0),
+        children: items
+            .map((e) => Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: e,
+                ))
+            .toList(),
+      ),
+    ),
+  );
+}
+
+Widget dropdownFormItem<T>(String title, List<T> keys, List<String> values,
+        T value, Function(T) onChanged) =>
+    DropdownButtonFormField<T>(
+        decoration: InputDecoration(labelText: title),
+        value: value,
+        items: LinkedHashMap.fromIterables(keys, values)
+            .entries
+            .map((e) => DropdownMenuItem<T>(
+                  child: Text(e.value),
+                  value: e.key,
+                ))
+            .toList(),
+        onChanged: onChanged);
+
+bool textIsNotEmpty(String s) => s?.trim()?.isNotEmpty == true;

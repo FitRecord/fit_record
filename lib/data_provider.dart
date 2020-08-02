@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:android/data_db.dart';
@@ -5,6 +6,7 @@ import 'package:android/data_export.dart';
 import 'package:android/data_sensor.dart';
 import 'package:android/data_storage_profiles.dart';
 import 'package:android/data_storage_records.dart';
+import 'package:android/data_sync.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -116,11 +118,13 @@ class DataProvider {
   final RecordingController recording;
   final SharedPreferences preferences;
   final ExportManager export = ExportManager();
+  final SyncManager sync;
 
   final DbWrapperChannel profilesWrapper;
   final DbWrapperChannel recordsWrapper;
 
-  DataProvider(this.profiles, this.records, this.indicators, this.recording,
+  DataProvider(
+      this.profiles, this.records, this.indicators, this.recording, this.sync,
       [this.profilesWrapper, this.recordsWrapper, this.preferences]);
 
   static backgroundCallback() async {
@@ -180,8 +184,14 @@ class DataProvider {
         DbWrapperChannel('org.fitrecord/proxy/profiles', profiles);
     final recordsWrapper =
         DbWrapperChannel('org.fitrecord/proxy/records', records);
-    return new DataProvider(profiles, records, new SensorIndicatorManager(),
-        new RecordingController(), profilesWrapper, recordsWrapper);
+    return new DataProvider(
+        profiles,
+        records,
+        new SensorIndicatorManager(),
+        new RecordingController(),
+        new SyncManager(profiles),
+        profilesWrapper,
+        recordsWrapper);
   }
 
   static Future<DataProvider> _openUiProvider() async {
@@ -190,8 +200,15 @@ class DataProvider {
     final profiles = new ProfileStorage(profilesWrapper);
     final records = new RecordStorage(recordsWrapper);
     final preferences = await SharedPreferences.getInstance();
-    return new DataProvider(profiles, records, new SensorIndicatorManager(),
-        new RecordingController(), null, null, preferences);
+    return new DataProvider(
+        profiles,
+        records,
+        new SensorIndicatorManager(),
+        new RecordingController(),
+        new SyncManager(profiles),
+        null,
+        null,
+        preferences);
   }
 
   static Future<DataProvider> openProvider(Function() callback) async {
@@ -203,17 +220,16 @@ class DataProvider {
   }
 
   Future<Map<String, String>> exportOne(int id, String type, String dir) async {
-    final record = await records.one(id);
-    if (record == null) throw ArgumentError('Invalid record');
-    final profile = await profiles.one(record.profileID);
-    if (profile == null) throw ArgumentError('Invalid profile');
-    final trackpoints = await records.loadTrackpoints(record);
     final exporter = export.exporter(type);
     if (exporter == null) throw ArgumentError('Invalid export type');
+    final record = await records.one(id);
+    if (record == null) throw ArgumentError('Invalid record');
+    final stream = await export.export(exporter, this, record);
+
     final path = p.join(
         dir, '${record.uid}-${DateTime.now().millisecondsSinceEpoch}.$type');
-    await export.exportToFile(
-        exporter.export(profile, record, trackpoints), path);
+    final str = await stream.join('');
+    await File(path).writeAsString(str, flush: true);
     return {'file': path, 'content_type': exporter.contentType()};
   }
 

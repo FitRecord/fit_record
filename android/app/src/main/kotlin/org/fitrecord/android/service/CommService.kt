@@ -1,5 +1,6 @@
 package org.fitrecord.android.service
 
+import android.app.Activity
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -19,6 +20,8 @@ import java.io.File
 import java.io.FileDescriptor
 import java.io.FileInputStream
 import java.io.FileOutputStream
+
+const val OAUTH_CALLBACK_URI = "https://europe-west3-fitrecord.cloudfunctions.net/oauth-callback"
 
 class CommService : ConnectableService() {
 
@@ -99,6 +102,27 @@ class CommService : ConnectableService() {
                     Log.e("Comm", "Error copying file", e)
                 }
             }
+        }
+    }
+
+    fun getSecrets(service: String?): Map<String, Any?>? {
+        when (service) {
+            "strava" -> return mapOf(
+                    "client_id" to BuildConfig.STRAVA_CLIENT_ID,
+                    "client_secret" to BuildConfig.STRAVA_CLIENT_SECRET,
+                    "callback_uri" to "$OAUTH_CALLBACK_URI/strava")
+            "dropbox" -> return mapOf(
+                    "client_id" to BuildConfig.DROPBOX_CLIENT_ID,
+                    "client_secret" to BuildConfig.DROPBOX_CLIENT_SECRET,
+                    "callback_uri" to "$OAUTH_CALLBACK_URI/dropbox")
+            else -> return null
+        }
+    }
+
+    fun openUri(activity: Activity, uri: String) {
+        Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+            setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(this)
         }
     }
 }

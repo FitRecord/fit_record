@@ -20,9 +20,11 @@ class MainActivity : FlutterActivity() {
     private val REQUEST_PERMISSIONS = 1
     private val BACKGROUND_CHANNEL = "org.fitrecord/background"
     private val RECORDING_CHANNEL = "org.fitrecord/recording"
+    private val SYNC_CHANNEL = "org.fitrecord/sync"
     private val PROXY_CHANNEL = "org.fitrecord/proxy"
     private lateinit var recordingChannel: MethodChannel
     private lateinit var backgroundChannel: MethodChannel
+    private lateinit var syncChannel: MethodChannel
     private lateinit var profilesProxy: ChannelEngineProxy
     private lateinit var recordsProxy: ChannelEngineProxy
     private val recordingService = ConnectableServiceConnection<RecordingService>()
@@ -102,6 +104,8 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        syncChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SYNC_CHANNEL)
+        syncChannel.setMethodCallHandler { call, result -> handleSync(call, result) }
         recordingService.async { it.listeners.add(listener) }
     }
 
@@ -110,8 +114,21 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
+    private fun handleSync(call: MethodCall, result: MethodChannel.Result) {
+        Log.d("Main", "Sync call: ${call.method} - ${call.arguments}")
+        when (call.method) {
+            "getSecrets" -> commService.with { result.success(it.getSecrets(call.arguments as String?)) }
+            "openUri" -> commService.with {
+                val args = call.arguments as Map<String, Any?>
+                it.openUri(this, args["uri"] as String)
+                result.success(null)
+            }
+        }
+
+    }
+
     private fun handleRecording(call: MethodCall, result: MethodChannel.Result) {
-        Log.i("Main", "Recording call: ${call.method} - ${call.arguments}")
+        Log.d("Main", "Recording call: ${call.method} - ${call.arguments}")
         when (call.method) {
             "activate" -> recordingService.with {
                 val args = call.arguments as Map<String, Object>
@@ -198,5 +215,13 @@ class MainActivity : FlutterActivity() {
             }
         }
         super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        Log.d("Main", "onNewIntent: ${intent.data}")
+        if (intent.data.toString().startsWith(OAUTH_CALLBACK_URI, true)) {
+            syncChannel.invokeMethod("oauthCallbackReceived", intent.data.toString())
+        }
     }
 }

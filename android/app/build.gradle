@@ -61,12 +61,20 @@ android {
         debug {
             buildConfigField("String", "EXPORT_AUTHORITY", "\"org.fitrecord.android.export.debug\"")
             manifestPlaceholders = [exportAuthorities:"org.fitrecord.android.export.debug"]
+            buildConfigField("String", "STRAVA_CLIENT_ID", "\"${localProperties.getProperty("strava.client_id")}\"")
+            buildConfigField("String", "STRAVA_CLIENT_SECRET", "\"${localProperties.getProperty("strava.client_secret")}\"")
+            buildConfigField("String", "DROPBOX_CLIENT_ID", "\"${localProperties.getProperty("dropbox.client_id")}\"")
+            buildConfigField("String", "DROPBOX_CLIENT_SECRET", "\"${localProperties.getProperty("dropbox.client_secret")}\"")
         }
         release {
             applicationIdSuffix ".release"
             signingConfig signingConfigs.release
             buildConfigField("String", "EXPORT_AUTHORITY", "\"org.fitrecord.android.export\"")
             manifestPlaceholders = [exportAuthorities:"org.fitrecord.android.export"]
+            buildConfigField("String", "STRAVA_CLIENT_ID", "\"${rootProject.getProperty("strava_client_id")}\"")
+            buildConfigField("String", "STRAVA_CLIENT_SECRET", "\"${rootProject.getProperty("strava_client_secret")}\"")
+            buildConfigField("String", "DROPBOX_CLIENT_ID", "\"${rootProject.getProperty("dropbox_client_id")}\"")
+            buildConfigField("String", "DROPBOX_CLIENT_SECRET", "\"${rootProject.getProperty("dropbox_client_secret")}\"")
         }
     }
     buildToolsVersion '29.0.3'

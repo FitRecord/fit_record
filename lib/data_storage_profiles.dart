@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:android/data_provider.dart';
@@ -6,14 +7,75 @@ import 'package:sqflite/sqflite.dart';
 
 import 'data_db.dart';
 
+class ActivityType {
+  final String name;
+  final String icon;
+
+  ActivityType(this.name, this.icon);
+}
+
+final ActivityTypes = LinkedHashMap.fromIterables([
+  'Running',
+  'Cycling',
+  'MountainBiking',
+  'Walking',
+  'Hiking',
+  'DownhillSkiing',
+  'CrossCountrySkiing',
+  'Snowboarding',
+  'Skating',
+  'Swimming',
+  'Wheelchair',
+  'Rowing',
+  'Elliptical',
+  'Gym',
+  'Climbing',
+  'RollerSkiing',
+  'StrengthTraining',
+  'StandUpPaddling',
+  'Other',
+], [
+  ActivityType('Running', 'run'),
+  ActivityType('Cycling', 'bike'),
+  ActivityType('Mountain Biking', 'bike'),
+  ActivityType('Walking', 'walk'),
+  ActivityType('Hiking', 'hike'),
+  ActivityType('Downhill Skiing', 'ski'),
+  ActivityType('Cross-Country Skiing', 'ski_nordic'),
+  ActivityType('Snowboarding', 'snowboard'),
+  ActivityType('Skating', 'skate'),
+  ActivityType('Swimming', 'swim'),
+  ActivityType('Wheelchair', 'run'),
+  ActivityType('Rowing', 'row'),
+  ActivityType('Elliptical', 'run'),
+  ActivityType('Gym', 'dumbbell'),
+  ActivityType('Climbing', 'hike'),
+  ActivityType('Roller Skiing', 'ski'),
+  ActivityType('Strength Training', 'dumbbell'),
+  ActivityType('StandUpPaddling', 'row'),
+  ActivityType('Other', 'run'),
+]);
+
 class Profile {
   int id;
-  String title, type, icon;
+  String title, icon;
+  String type;
   int lastUsed;
   String screens, screensExt, zonesHrm, zonesPace, zonesPower, config;
 
-  static List<String> types = ['Running', 'Cycling', 'Skiing', 'Swimming'];
-  static List<String> icons = ['run', 'bike', 'walk', 'row'];
+  static List<String> icons = [
+    'run',
+    'bike',
+    'row',
+    'swim',
+    'ski',
+    'dumbbell',
+    'walk',
+    'hike',
+    'skate',
+    'ski_nordic',
+    'snowboard',
+  ];
 
   num get maxTrackpoints => 20;
 
@@ -96,8 +158,9 @@ class Profile {
     switch (type) {
       case 'Running':
         return 'pace_sm';
+      default:
+        return 'speed_ms';
     }
-    return 'speed_ms';
   }
 
   String makeStatusText(
@@ -109,8 +172,30 @@ class Profile {
   }
 }
 
+class SyncConfig {
+  final int id;
+  int direction, mode;
+  final String service;
+  String title, _config, _secrets;
+
+  SyncConfig(
+    this.id,
+    this.service,
+    this.title,
+    this.direction,
+    this.mode,
+    this._config,
+    this._secrets,
+  );
+
+  get secretsJson => _secrets == null ? null : jsonDecode(_secrets);
+
+  set secretsJson(dynamic value) =>
+      _secrets = value == null ? null : jsonEncode(value);
+}
+
 class ProfileStorage extends DatabaseStorage {
-  ProfileStorage([ChannelDbDelegate delegate]) : super(3, delegate);
+  ProfileStorage([ChannelDbDelegate delegate]) : super(4, delegate);
 
   Profile _toProfile(Map<String, dynamic> e) {
     final profile = Profile(e['id'], e['title'], e['type'], e['icon']);
@@ -214,6 +299,19 @@ class ProfileStorage extends DatabaseStorage {
           );
         ''');
         break;
+      case 3:
+        await db.execute('''
+          CREATE TABLE "sync_configs" (
+            "id" INTEGER PRIMARY KEY,
+            "service" TEXT NOT NULL,
+            "title" TEXT NOT NULL,
+            "direction" INT NOT NULL DEFAULT 0,
+            "mode" INT NOT NULL DEFAULT 0,
+            "from" INT,
+            "secrets" TEXT,
+            "config" TEXT
+          );
+        ''');
     }
   }
 
@@ -266,5 +364,51 @@ class ProfileStorage extends DatabaseStorage {
   Future remove(Profile profile) async {
     return openSession((t) =>
         t.delete('"profiles"', where: '"id"=?', whereArgs: [profile.id]));
+  }
+
+  saveSyncConfig(SyncConfig config) async {
+    print('saveSyncConfig: ${config.id}');
+    return openSession((t) {
+      if (config.id == null)
+        return t.insert('"sync_configs"', {
+          'service': config.service,
+          'title': config.title,
+          'direction': config.direction,
+          'mode': config.mode,
+          'secrets': config._secrets
+        });
+      else
+        return t.update(
+          '"sync_configs"',
+          {
+            'title': config.title,
+            'direction': config.direction,
+            'mode': config.mode,
+            'secrets': config._secrets
+          },
+          where: '"id"=?',
+          whereArgs: [config.id],
+        );
+    });
+  }
+
+  Future<Iterable<SyncConfig>> allSyncConfigs() async {
+    return openSession((t) async {
+      final list = await t.query('"sync_configs"', orderBy: '"id"');
+      return list.map((e) => _toSyncConfig(e));
+    });
+  }
+
+  SyncConfig _toSyncConfig(Map<String, dynamic> e) {
+    final result = SyncConfig(e['id'], e['service'], e['title'], e['direction'],
+        e['mode'], e['config'], e['secrets']);
+    return result;
+  }
+
+  updateSyncSecrets(SyncConfig config) async {
+    return openSession(
+      (t) => t.update('"sync_configs"', {'secrets': config._secrets},
+          where: '"id"=?', whereArgs: [config.id]),
+    );
   }
 }

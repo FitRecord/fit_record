@@ -23,12 +23,12 @@ double _defaultExtractor(Map<String, double> map, String key) => map[key];
 class Record {
   final int id, started, profileID, status;
   final String uid;
-  String title, description, meta;
+  String title, description, meta, _sync;
   List<Map<String, double>> trackpoints;
   List<int> laps;
 
-  Record(
-      this.id, this.uid, this.profileID, this.started, this.status, this.meta);
+  Record(this.id, this.uid, this.profileID, this.started, this.status,
+      this.meta, this._sync);
 
   Map<String, dynamic> get metaJson {
     try {
@@ -36,6 +36,10 @@ class Record {
     } catch (e) {}
     return null;
   }
+
+  Map get syncJson => _sync == null ? <String, String>{} : jsonDecode(_sync);
+
+  set syncJson(Map value) => _sync = value == null ? null : jsonEncode(value);
 
   String smartTitle() {
     return title ??
@@ -87,7 +91,7 @@ class RecordStorage extends DatabaseStorage {
 
   Record _toRecord(Map<String, dynamic> row) {
     final r = Record(row['id'], row['uid'], row['profile_id'], row['started'],
-        row['status'], row['meta']);
+        row['status'], row['meta'], row['sync']);
     r.title = row['title'];
     r.description = row['description'];
     return r;
@@ -378,7 +382,6 @@ class RecordStorage extends DatabaseStorage {
       where.add('"profile_id"=?');
       whereArgs.add(profile.id);
     }
-    final profilesList = await profiles.all();
     final list = await openSession((t) async {
       final list = await t.query(
         '"records"',
@@ -489,6 +492,15 @@ class RecordStorage extends DatabaseStorage {
   Future updateFields(Record record) async {
     return openSession((t) => t.update(
         '"records"', {'title': record.title, 'description': record.description},
+        where: '"id"=?', whereArgs: [record.id]));
+  }
+
+  Future updateSync(Record record, key, value) async {
+    final map = record.syncJson;
+    print('updateSync: $key, $value, ${map.runtimeType}, ${record._sync}');
+    map[key.toString()] = value?.toString();
+    record.syncJson = map;
+    return openSession((t) => t.update('"records"', {'sync': record._sync},
         where: '"id"=?', whereArgs: [record.id]));
   }
 

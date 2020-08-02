@@ -372,7 +372,7 @@ class ProfilesPane extends MainPaneState {
     final selector = profileDropdown(
       profiles,
       profile,
-      Theme.of(ctx).primaryTextTheme.headline6,
+      Theme.of(ctx).textTheme.headline6,
       (value) => _select(value),
     );
     return AppBar(
@@ -397,7 +397,7 @@ class ProfilesPane extends MainPaneState {
 
   _edit(BuildContext ctx, Profile profile) async {
     final id = await _ProfileEditor.open(ctx, widget.provider,
-        profile ?? Profile(null, 'Running', Profile.types[0], 'run'));
+        profile ?? Profile(null, 'Running', 'Running', 'run'));
     if (id != null) {
       _init(id);
     }
@@ -564,7 +564,7 @@ class _ZonesEditorState extends State<_ZonesEditor> {
   }
 
   Widget _buildForm(BuildContext ctx) {
-    final titleStyle = Theme.of(ctx).primaryTextTheme.headline6;
+    final titleStyle = Theme.of(ctx).textTheme.headline6;
     _changed(int index) {
       final form = Form.of(ctx);
       if (form.validate()) {
@@ -667,7 +667,10 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   }
 
   _changeType(String type) {
-    setState(() => widget._profile.type = type);
+    setState(() {
+      widget._profile.type = type;
+      widget._profile.icon = ActivityTypes[type].icon;
+    });
   }
 
   _changeIcon(String icon) {
@@ -733,9 +736,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     final typeDropbox = DropdownButtonFormField<String>(
       decoration: InputDecoration(labelText: 'Type'),
       value: widget._profile.type,
-      items: Profile.types
+      items: ActivityTypes.keys
           .map((e) => DropdownMenuItem<String>(
-                child: Text(e),
+                child: Text(ActivityTypes[e].name),
                 value: e,
               ))
           .toList(),
