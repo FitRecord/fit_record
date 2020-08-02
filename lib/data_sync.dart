@@ -126,4 +126,8 @@ class SyncManager {
     await dataProvider.records.updateSync(record, config.id, id);
     print('Upload: $id, ${record.syncJson}');
   }
+
+  Future delete(SyncConfig config) {
+    return _profileStorage.deleteSyncConfig(config);
+  }
 }

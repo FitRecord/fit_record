@@ -411,4 +411,12 @@ class ProfileStorage extends DatabaseStorage {
           where: '"id"=?', whereArgs: [config.id]),
     );
   }
+
+  Future deleteSyncConfig(SyncConfig config) async {
+    return openSession((t) => t.delete(
+          '"sync_configs"',
+          where: '"id"=?',
+          whereArgs: [config.id],
+        ));
+  }
 }

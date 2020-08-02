@@ -58,20 +58,9 @@ class SyncPane extends MainPaneState {
 
   @override
   Widget build(BuildContext context) {
-    final addButton = PopupMenuButton<SyncProvider>(
-      child: RaisedButton(
-        onPressed: () => _showProviderSelector(context),
-        child: Text('New configuration'),
-      ),
-      itemBuilder: (ctx) => widget.provider.sync.providers.values
-          .map((e) => PopupMenuItem<SyncProvider>(
-                child: ListTile(
-                  trailing: Icon(e.icon()),
-                  title: Text(e.name()),
-                ),
-              ))
-          .toList(),
-      onSelected: (provider) => null,
+    final addButton = RaisedButton(
+      onPressed: () => _showProviderSelector(context),
+      child: Text('New configuration'),
     );
     var list = ListView();
     if (configs != null)
@@ -97,7 +86,7 @@ class SyncPane extends MainPaneState {
       onTap: () => _editConfig(ctx, e),
       leading: Icon(provider.icon()),
       title: Text(e.title),
-      trailing: IconButton(icon: Icon(Icons.sync), onPressed: () => null),
+//      trailing: IconButton(icon: Icon(Icons.sync), onPressed: () => null),
     );
   }
 }
@@ -162,6 +151,7 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
       showMessage(ctx, 'Please authorize the Application');
     }
     try {
+      widget._config.title = titleCtrl.text.trim();
       await widget._manager.save(widget._config);
       Navigator.pop(ctx);
     } catch (e) {
@@ -175,6 +165,18 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
       _challenge = await widget._manager.startOauth(widget._config.service);
     } catch (e) {
       print('_startOAuth error: $e');
+    }
+  }
+
+  _delete(BuildContext ctx) async {
+    final yes = await yesNoDialog(ctx, 'Delete the Configuration?');
+    if (!yes) return;
+    try {
+      await widget._manager.delete(widget._config);
+      Navigator.pop(ctx);
+    } catch (e) {
+      print('Delete error: $e');
+      showMessage(ctx, 'Something is not good');
     }
   }
 
@@ -206,9 +208,17 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
         child: Text('Authorize'),
       ));
     }
+    final actions = <Widget>[];
+    if (widget._config.id != null) {
+      actions.add(IconButton(
+        icon: Icon(Icons.delete),
+        onPressed: () => _delete(context),
+      ));
+    }
     return Scaffold(
       appBar: AppBar(
         title: iconWithText(Icon(widget._provider.icon()), title),
+        actions: actions,
       ),
       body: formWithItems(context, items),
       floatingActionButton: FloatingActionButton(
