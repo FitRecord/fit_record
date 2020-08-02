@@ -367,13 +367,11 @@ class _RecordDetailsState extends State<RecordDetailsPane>
       setState(() => _syncing = true);
       await widget.provider.sync
           .upload(widget.provider, _record, _profile, config);
-      setState(() => null);
     } catch (e) {
       print('_sync error: $e');
       showMessage(ctx, 'Something is not good');
-//      rethrow;
     } finally {
-      setState(() => _syncing = false);
+      if (mounted) setState(() => _syncing = false);
     }
   }
 
@@ -434,7 +432,11 @@ class _RecordDetailsState extends State<RecordDetailsPane>
                     trailing: Checkbox(
                         value: _record.syncJson[e.id.toString()] != null,
                         onChanged: null),
-                    title: Text(e.title),
+                    title: Text(
+                      e.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   value: e,
                 ))

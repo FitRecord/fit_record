@@ -31,15 +31,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="europe-west3-fitrecord.cloudfunctions.net"
-                    android:pathPrefix="/oauth-callback"/>
-            </intent-filter>
         </activity>
         <service android:name=".service.RecordingService" android:enabled="true" android:foregroundServiceType="location|connectedDevice"/>
         <service android:name=".service.BLEService" android:enabled="true"/>

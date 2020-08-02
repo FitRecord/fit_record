@@ -21,6 +21,7 @@ dependencies:
   latlong: '^0.6.1'
   xml: '^4.2.0'
   path: '^1.7.0'
+  webview_flutter: '^0.3.22+1'
 
   # cupertino_icons: ^0.1.3
 

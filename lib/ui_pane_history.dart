@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 class HistoryPane extends MainPaneState {
   final _records = Map<int, HistoryResult>();
   Map<int, Profile> _profiles;
+  Map<String, SyncConfig> _syncConfigs;
   HistoryRange _range = HistoryRange.Week;
   DateTime _date = DateTime.now();
   final _dateTimeFormat = dateTimeFormat();
@@ -36,10 +37,13 @@ class HistoryPane extends MainPaneState {
   Future _load(BuildContext ctx) async {
     try {
       final profiles = await widget.provider.profiles.all();
+      final syncConfigs = await widget.provider.sync.all();
       setState(() {
         _date = DateTime.now();
         _records.clear();
         _profiles = Map.fromIterable(profiles, key: (el) => el.id);
+        _syncConfigs =
+            Map.fromIterable(syncConfigs, key: (el) => el.id.toString());
       });
     } catch (e) {
       print('Load history error: $e');
@@ -81,9 +85,7 @@ class HistoryPane extends MainPaneState {
       final data = await widget.provider.records.history(
           widget.provider.profiles, _range, _date, index,
           statKey: _statKey);
-      setState(() {
-        _records[index] = data;
-      });
+      if (mounted) setState(() => _records[index] = data);
     } catch (e) {
       print('Error in history(): $e');
     }
@@ -315,25 +317,40 @@ class HistoryPane extends MainPaneState {
     final bottomRow = <Widget>[
       Padding(
         padding: EdgeInsets.only(right: 4.0),
-        child: profileIcon(profile),
+        child: Padding(
+            padding: EdgeInsets.all(4.0), child: profileIcon(profile, 16.0)),
       ),
-      Text(
+      Expanded(
+          child: Text(
         profile?.title ?? '?',
         softWrap: false,
         overflow: TextOverflow.ellipsis,
         style: theme.subtitle2,
-      )
+      ))
     ];
-    if (profile?.title == null) {
-      bottomRow.add(Expanded(
-          child: Text(
-        dateTime,
-        textAlign: TextAlign.end,
-        style: theme.caption,
-        softWrap: false,
-        overflow: TextOverflow.ellipsis,
-      )));
+    if (textIsNotEmpty(item.title)) {
+      bottomRow.add(
+        Text(
+          dateTime,
+          textAlign: TextAlign.end,
+          style: theme.subtitle2,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
     }
+    final sync = item.syncJson;
+    sync.entries.forEach((el) {
+      final config = _syncConfigs[el.key];
+      if (config != null && el.value != null) {
+        bottomRow.add(Padding(
+            padding: EdgeInsets.only(left: 4.0),
+            child: Icon(
+              config.provider.icon(),
+              size: 16.0,
+            )));
+      }
+    });
     final colItems = <Widget>[
       Text(
         item.smartTitle(),

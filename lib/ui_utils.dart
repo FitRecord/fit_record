@@ -88,9 +88,9 @@ Widget profileDropdown(List<Profile> profiles, Profile selected,
       onChanged: (value) => onChanged(value));
 }
 
-Icon profileIcon(Profile profile) => Icon(
+Icon profileIcon(Profile profile, [double size = 24.0]) => Icon(
       profileTypeIcon(profile.icon),
-      size: 24.0,
+      size: size,
     );
 
 Future<bool> yesNoDialog(BuildContext ctx, String title) async {

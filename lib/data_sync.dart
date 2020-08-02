@@ -4,7 +4,6 @@ import 'package:android/data_provider.dart';
 import 'package:android/data_storage_profiles.dart';
 import 'package:android/data_storage_records.dart';
 import 'package:android/data_sync_impl.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class OAuthCallback {
@@ -17,18 +16,15 @@ class OAuthCallback {
 
 class SyncManager {
   final _syncChannel = MethodChannel('org.fitrecord/sync');
-  final oauthCallbackReceived = ValueNotifier<OAuthCallback>(null);
   final ProfileStorage _profileStorage;
   final providers = LinkedHashMap.fromIterables(
-    ['strava'],
-    <SyncProvider>[StravaProvider()],
+    ['strava', 'dropbox'],
+    <SyncProvider>[StravaProvider(), DropboxProvider()],
   );
 
   SyncManager(this._profileStorage) {
     _syncChannel.setMethodCallHandler((call) async {
       switch (call.method) {
-        case 'oauthCallbackReceived':
-          return _oauthCallbackReceived(call.arguments);
       }
     });
   }
@@ -41,35 +37,20 @@ class SyncManager {
   Future<Map<String, dynamic>> _secrets(String service) =>
       _syncChannel.invokeMapMethod<String, dynamic>('getSecrets', service);
 
-  Future<int> startOauth(String service) async {
+  Future<Uri> buildOauthUri(String service) async {
     final provider = providers[service];
     final challenge = DateTime.now().millisecondsSinceEpoch;
     final secrets = await _secrets(service);
-    await _syncChannel.invokeMethod('openUri', {
-      'uri': provider.buildOauthUri(secrets, challenge).toString(),
-    });
-    return challenge;
+    return provider.buildOauthUri(secrets, challenge);
   }
 
-  void _oauthCallbackReceived(String url) {
-    final uri = Uri.parse(url);
-    final state = uri.queryParameters['state'] ?? '';
-    if (state != '') {
-      final service = uri.pathSegments.last;
-      final challenge = int.tryParse(state);
-      oauthCallbackReceived.value = OAuthCallback(service, challenge, uri);
-    } else if (uri.pathSegments.length > 1) {
-      final service = uri.pathSegments[uri.pathSegments.length - 2];
-      final challenge = int.tryParse(uri.pathSegments.last);
-      oauthCallbackReceived.value = OAuthCallback(service, challenge, uri);
-    }
-  }
-
-  completeOauth(SyncConfig config, Uri uri) async {
+  completeOauth(SyncConfig config, Map data) async {
+    final query = data['query'];
+    if (query == null || query['error'] != null)
+      throw ArgumentError('Invalid query');
     final provider = providers[config.service];
     final secrets = await _secrets(config.service);
-    final tokenData = await provider.completeOauth(secrets, uri);
-    print('completeOauth result: $tokenData');
+    final tokenData = await provider.completeOauth(secrets, query);
     config.secretsJson = tokenData;
   }
 
@@ -87,7 +68,10 @@ class SyncManager {
     final list = await _profileStorage.allSyncConfigs();
     return list
         .where((element) => providers.containsKey(element.service))
-        .toList();
+        .map((e) {
+      e.provider = providers[e.service];
+      return e;
+    }).toList();
   }
 
   Future<T> _httpAuthenticated<T>(SyncProvider provider, SyncConfig config,
@@ -122,6 +106,9 @@ class SyncManager {
           await dataProvider.export.export(exporter, dataProvider, record);
       id = await _httpAuthenticated(provider, config,
           () => provider.uploadActivity(config, record, profile, stream));
+    } else {
+      await _httpAuthenticated(provider, config,
+          () => provider.updateActivity(config, record, profile, id));
     }
     await dataProvider.records.updateSync(record, config.id, id);
     print('Upload: $id, ${record.syncJson}');

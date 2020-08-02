@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:android/data_provider.dart';
 import 'package:android/data_sensor.dart';
+import 'package:android/data_sync_impl.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'data_db.dart';
@@ -10,11 +11,12 @@ import 'data_db.dart';
 class ActivityType {
   final String name;
   final String icon;
+  final String group;
 
-  ActivityType(this.name, this.icon);
+  ActivityType(this.name, this.icon, this.group);
 }
 
-final ActivityTypes = LinkedHashMap.fromIterables([
+final ActivityTypesNames = [
   'Running',
   'Cycling',
   'MountainBiking',
@@ -34,26 +36,28 @@ final ActivityTypes = LinkedHashMap.fromIterables([
   'StrengthTraining',
   'StandUpPaddling',
   'Other',
-], [
-  ActivityType('Running', 'run'),
-  ActivityType('Cycling', 'bike'),
-  ActivityType('Mountain Biking', 'bike'),
-  ActivityType('Walking', 'walk'),
-  ActivityType('Hiking', 'hike'),
-  ActivityType('Downhill Skiing', 'ski'),
-  ActivityType('Cross-Country Skiing', 'ski_nordic'),
-  ActivityType('Snowboarding', 'snowboard'),
-  ActivityType('Skating', 'skate'),
-  ActivityType('Swimming', 'swim'),
-  ActivityType('Wheelchair', 'run'),
-  ActivityType('Rowing', 'row'),
-  ActivityType('Elliptical', 'run'),
-  ActivityType('Gym', 'dumbbell'),
-  ActivityType('Climbing', 'hike'),
-  ActivityType('Roller Skiing', 'ski'),
-  ActivityType('Strength Training', 'dumbbell'),
-  ActivityType('StandUpPaddling', 'row'),
-  ActivityType('Other', 'run'),
+];
+
+final ActivityTypes = LinkedHashMap.fromIterables(ActivityTypesNames, [
+  ActivityType('Running', 'run', 'Running'),
+  ActivityType('Cycling', 'bike', 'Cycling'),
+  ActivityType('Mountain Biking', 'bike', 'Cycling'),
+  ActivityType('Walking', 'walk', 'Running'),
+  ActivityType('Hiking', 'hike', 'Running'),
+  ActivityType('Downhill Skiing', 'ski', 'Skiing'),
+  ActivityType('Cross-Country Skiing', 'ski_nordic', 'Skiing'),
+  ActivityType('Snowboarding', 'snowboard', 'Skiing'),
+  ActivityType('Skating', 'skate', 'Running'),
+  ActivityType('Swimming', 'swim', 'Swimming'),
+  ActivityType('Wheelchair', 'run', 'Running'),
+  ActivityType('Rowing', 'row', 'Rowing'),
+  ActivityType('Elliptical', 'run', 'Skiing'),
+  ActivityType('Gym', 'dumbbell', 'Gym'),
+  ActivityType('Climbing', 'hike', 'Running'),
+  ActivityType('Roller Skiing', 'ski', 'Skiing'),
+  ActivityType('Strength Training', 'dumbbell', 'Gym'),
+  ActivityType('StandUpPaddling', 'row', 'Rowing'),
+  ActivityType('Other', 'run', 'Running'),
 ]);
 
 class Profile {
@@ -177,6 +181,8 @@ class SyncConfig {
   int direction, mode;
   final String service;
   String title, _config, _secrets;
+
+  SyncProvider provider;
 
   SyncConfig(
     this.id,

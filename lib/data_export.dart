@@ -34,6 +34,7 @@ enum _TCXLocation {
   Hrm,
   Cadence,
   Power,
+  Speed,
 }
 
 class TCXExport extends Exporter {
@@ -49,13 +50,16 @@ class TCXExport extends Exporter {
         DateTime.fromMillisecondsSinceEpoch(msec).toUtc().toIso8601String();
     streamNode(XmlNode node) => XmlNodeEncoder().convert(<XmlNode>[node]);
     xmlElement(String name, String value,
-            {List<XmlElement> children, String ns}) =>
-        XmlElement(XmlName(name, ns), const [], children ?? [XmlText(value)]);
-    xmlAttr(String name, String value) =>
+            {List<XmlElement> children, String ns, List<XmlAttribute> attr}) =>
+        XmlElement(
+            XmlName(name, ns), attr ?? const [], children ?? [XmlText(value)]);
+    xmlEventAttr(String name, String value) =>
         XmlEventAttribute(name, value, XmlAttributeType.DOUBLE_QUOTE);
+    xmlAttr(String name, String value) =>
+        XmlAttribute(XmlName(name), value, XmlAttributeType.DOUBLE_QUOTE);
     startLap(int msec) => <XmlEvent>[
           XmlStartElementEvent("Lap",
-              <XmlEventAttribute>[xmlAttr("StartTime", dt(msec))], false),
+              <XmlEventAttribute>[xmlEventAttr("StartTime", dt(msec))], false),
         ]
             .followedBy(streamNode(xmlElement("TotalTimeSeconds", "0")))
             .followedBy(streamNode(xmlElement("DistanceMeters", "0")))
@@ -74,14 +78,27 @@ class TCXExport extends Exporter {
       return null;
     }
 
+    String _activityTypeToType(ActivityType type) {
+      switch (type.group) {
+        case 'Running':
+          return 'Running';
+        case 'Cycling':
+          return 'Biking';
+      }
+      return 'Other';
+    }
+
     Stream<List<XmlEvent>> processTrackpoints() async* {
+      final type = ActivityTypes[profile.type];
       final start = <XmlEvent>[
         XmlProcessingEvent('xml', 'version="1.0"'),
-        XmlStartElementEvent('TrainingCenterDatabase',
-            [xmlAttr("xmlns", TCD_NS), xmlAttr("xmlns:tcx", TCX_NS)], false),
-        XmlStartElementEvent('Activities', const [], false),
         XmlStartElementEvent(
-            'Activity', [xmlAttr('Sport', profile.type.toString())], false),
+            'TrainingCenterDatabase',
+            [xmlEventAttr("xmlns", TCD_NS), xmlEventAttr("xmlns:tcx", TCX_NS)],
+            false),
+        XmlStartElementEvent('Activities', const [], false),
+        XmlStartElementEvent('Activity',
+            [xmlEventAttr('Sport', _activityTypeToType(type))], false),
       ];
       // <XML><TCD><Acts><Act>
       yield start;
@@ -148,6 +165,19 @@ class TCXExport extends Exporter {
       yield <XmlEvent>[
         XmlEndElementEvent("Track"),
         XmlEndElementEvent("Lap"),
+      ];
+      yield streamNode(xmlElement('Extensions', '', children: [
+        xmlElement('FitRecord', '', children: [
+          xmlElement('Title', record.title ?? ''),
+          xmlElement('Description', record.description ?? ''),
+        ], attr: [
+          xmlAttr('UID', record.uid),
+          xmlAttr('Type', profile.type),
+          xmlAttr('Group', type.group),
+          xmlAttr('Name', type.name)
+        ])
+      ]));
+      yield <XmlEvent>[
         XmlEndElementEvent("Activity"),
         XmlEndElementEvent("Activities"),
         XmlEndElementEvent("TrainingCenterDatabase"),
@@ -212,6 +242,9 @@ class TCXExport extends Exporter {
               case "Time":
                 loc = _TCXLocation.Time;
                 break;
+              case "Speed":
+                loc = _TCXLocation.Speed;
+                break;
               case "LatitudeDegrees":
                 loc = _TCXLocation.Lat;
                 break;
@@ -255,6 +288,7 @@ class TCXExport extends Exporter {
                 if (hrm != null) data['sensor']['hrm'] = hrm;
                 if (power != null) data['sensor']['power'] = power;
                 if (cadence != null) data['sensor']['cadence'] = cadence * 2.0;
+                if (speed != null) data['sensor']['speed_ms'] = speed;
                 return trackpointHandler(0, ts, data);
             }
           }
@@ -295,6 +329,9 @@ class TCXExport extends Exporter {
               break;
             case _TCXLocation.Cadence:
               cadence = _parse(cadence);
+              break;
+            case _TCXLocation.Speed:
+              speed = _parse(speed);
               break;
           }
           break;

@@ -29,7 +29,7 @@ abstract class SyncProvider {
   bool oauth();
   Uri buildOauthUri(Map<String, dynamic> secrets, int challenge) => null;
   Future<Map<String, dynamic>> completeOauth(
-          Map<String, dynamic> secrets, Uri uri) =>
+          Map<String, dynamic> secrets, Map query) =>
       null;
 
   String _token(Map<String, dynamic> secrets) =>
@@ -41,13 +41,24 @@ abstract class SyncProvider {
     SyncConfig config,
     dynamic url,
     dynamic body, {
+    String method,
     bool rawBody = false,
     http.BaseRequest request,
+    Map<String, String> headers,
   }) async {
     return _jsonHttp(url, body,
         rawBody: rawBody,
+        method: method,
         bearerToken: _token(config.secretsJson),
-        request: request);
+        request: request,
+        extraHeaders: headers);
+  }
+
+  bool _isJsonResponse(http.StreamedResponse response) {
+    if (response.headers['content-type']?.startsWith('application/json') ==
+        true) return true;
+    if (response.headers['content-type'] == 'text/javascript') return true;
+    return false;
   }
 
   Future<T> _jsonHttp<T>(
@@ -57,16 +68,19 @@ abstract class SyncProvider {
     String bearerToken,
     bool rawBody = false,
     http.BaseRequest request,
+    Map<String, String> extraHeaders,
   }) async {
     final headers = Map<String, String>();
     if (bearerToken != null) {
       headers['Authorization'] = 'Bearer $bearerToken';
     }
+    if (extraHeaders != null) headers.addAll(extraHeaders);
     if (request == null) if (body != null) {
-      request = http.Request('post', url);
+      request = http.Request(method ?? 'post', url);
       if (rawBody) {
         (request as http.Request).bodyFields = body as Map<String, String>;
       } else {
+        headers['content-type'] = 'application/json';
         (request as http.Request).body = jsonEncode(body);
       }
     } else
@@ -75,16 +89,13 @@ abstract class SyncProvider {
     final response = await request.send();
     if (response.statusCode < 400) {
       final str = await response.stream.bytesToString();
-      if (response.headers['content-type']?.startsWith('application/json') ==
-          true) {
-//        print('JSON: $str');
+      if (_isJsonResponse(response)) {
         return jsonDecode(str);
       }
       return str as T;
     }
-    final str = await response.stream.bytesToString();
     print(
-        'HTTP error: ${response.statusCode} - ${response.reasonPhrase}, $url, $str');
+        'HTTP error: ${response.statusCode} - ${response.reasonPhrase}, $url');
     throw HttpException(response.statusCode, response.reasonPhrase);
   }
 
@@ -133,10 +144,15 @@ abstract class SyncProvider {
     return false;
   }
 
+  String activityTypeToType(String type, ActivityType activityType);
+//  String TypeToActivityType(String type);
+
   Future<dynamic> getActivityID(SyncConfig config, Record record);
 
   Future uploadActivity(
       SyncConfig config, Record record, Profile profile, dynamic data);
+
+  Future updateActivity(SyncConfig config, Record record, Profile profile, id);
 }
 
 class StravaProvider extends SyncProvider {
@@ -171,14 +187,14 @@ class StravaProvider extends SyncProvider {
 
   @override
   Future<Map<String, dynamic>> completeOauth(
-      Map<String, dynamic> secrets, Uri uri) {
+      Map<String, dynamic> secrets, Map query) {
     final tokenUri =
         Uri(scheme: 'https', host: _HOST, path: '/api/v3/oauth/token');
     return _oauthTokenExchange(
       tokenUri,
       secrets['client_id'],
       secrets['client_secret'],
-      code: uri.queryParameters['code'],
+      code: query['code'],
     );
   }
 
@@ -257,6 +273,45 @@ class StravaProvider extends SyncProvider {
     if (output['error'] != null) throw Exception(output['error']);
     return output['activity_id'];
   }
+
+  @override
+  Future updateActivity(
+      SyncConfig config, Record record, Profile profile, id) async {
+    final uri =
+        Uri(scheme: 'https', host: _HOST, path: '/api/v3/activities/$id');
+    final fields = <String, String>{};
+    fields['type'] =
+        activityTypeToType(profile.type, ActivityTypes[profile.type]);
+    if (textIsNotEmpty(record.title)) fields['name'] = record.title;
+    if (textIsNotEmpty(record.description))
+      fields['description'] = record.description;
+    await _httpAuthenticated(config, uri, fields, method: 'put');
+  }
+
+  @override
+  String activityTypeToType(String type, ActivityType activityType) {
+    return Map.fromIterables(ActivityTypesNames, [
+      'Run',
+      'Ride',
+      'Ride',
+      'Walk',
+      'Hike',
+      'AlpineSki',
+      'NordicSki',
+      'Snowboard',
+      'IceSkate',
+      'Swim',
+      'Wheelchair',
+      'Rowing',
+      'Elliptical',
+      'WeightTraining',
+      'Climbing',
+      'RockClimbing',
+      'WeightTraining',
+      'StandUpPaddling',
+      'Workout',
+    ])[type];
+  }
 }
 
 class DropboxProvider extends SyncProvider {
@@ -270,6 +325,10 @@ class DropboxProvider extends SyncProvider {
 
   @override
   bool oauth() => true;
+
+  @override
+  Uri _refreshTokenUri() =>
+      Uri(scheme: 'https', host: _HOST, path: '/oauth2/token');
 
   @override
   Uri buildOauthUri(Map<String, dynamic> secrets, int challenge) {
@@ -290,28 +349,71 @@ class DropboxProvider extends SyncProvider {
 
   @override
   Future<Map<String, dynamic>> completeOauth(
-      Map<String, dynamic> secrets, Uri uri) {
+      Map<String, dynamic> secrets, Map query) {
     final tokenUri = Uri(scheme: 'https', host: _HOST, path: '/oauth2/token');
 //    print('completeOauth $tokenUri, $uri');
     return _oauthTokenExchange(
       tokenUri,
       secrets['client_id'],
       secrets['client_secret'],
-      code: uri.queryParameters['code'],
+      code: query['code'],
       extra: {'redirect_uri': secrets['callback_uri']},
     );
   }
 
+  String _fileName(Record record) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(record.started, isUtc: true);
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final mi = dt.minute.toString().padLeft(2, '0');
+    final s = dt.second.toString().padLeft(2, '0');
+    return '/$y/$m/$y-$m-$d-$h-$mi-$s-${record.uid}.tcx'.toLowerCase();
+  }
+
   @override
-  Future getActivityID(SyncConfig config, Record record) {
-    // TODO: implement getActivityID
-    throw UnimplementedError();
+  Future getActivityID(SyncConfig config, Record record) async {
+    final url =
+        Uri(scheme: 'https', host: _HOST, path: '/2/files/get_metadata');
+    try {
+      await _httpAuthenticated(config, url, {'path': _fileName(record)});
+    } on HttpException catch (e) {
+      if (e.code == 409) return null; // File doesn't exist
+      rethrow;
+    }
+    return record.uid;
   }
 
   @override
   Future uploadActivity(
-      SyncConfig config, Record record, Profile profile, data) {
-    // TODO: implement uploadActivity
-    throw UnimplementedError();
+      SyncConfig config, Record record, Profile profile, data) async {
+    final stream = data as Stream<String>;
+    final url = Uri(
+        scheme: 'https',
+        host: 'content.dropboxapi.com',
+        path: '/2/files/upload');
+    final request = http.Request('post', url);
+    final bytes =
+        await http.ByteStream(stream.transform(utf8.encoder)).toBytes();
+    request.bodyBytes = bytes;
+    final headers = {
+      'Dropbox-API-Arg': jsonEncode({'path': _fileName(record)}),
+      'content-type': 'application/octet-stream',
+    };
+    await _httpAuthenticated(config, url, null,
+        request: request, headers: headers);
+    return record.uid;
+  }
+
+  @override
+  Future updateActivity(
+      SyncConfig config, Record record, Profile profile, id) async {
+    return record.uid; // No-op for now
+  }
+
+  @override
+  String activityTypeToType(String type, ActivityType activityType) {
+    return type;
   }
 }

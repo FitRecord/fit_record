@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:android/data_storage_profiles.dart';
 import 'package:android/data_sync.dart';
 import 'package:android/data_sync_impl.dart';
@@ -5,6 +7,7 @@ import 'package:android/ui_main.dart';
 import 'package:android/ui_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class SyncPane extends MainPaneState {
   List<SyncConfig> configs;
@@ -58,10 +61,11 @@ class SyncPane extends MainPaneState {
 
   @override
   Widget build(BuildContext context) {
-    final addButton = RaisedButton(
-      onPressed: () => _showProviderSelector(context),
-      child: Text('New configuration'),
-    );
+    final addButton = Builder(
+        builder: (ctx) => RaisedButton(
+              onPressed: () => _showProviderSelector(ctx),
+              child: Text('New configuration'),
+            ));
     var list = ListView();
     if (configs != null)
       list = ListView(
@@ -74,7 +78,13 @@ class SyncPane extends MainPaneState {
       body: Column(
         mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [Expanded(child: list), addButton],
+        children: [
+          Expanded(child: list),
+          Padding(
+            padding: EdgeInsets.all(8.0),
+            child: addButton,
+          )
+        ],
       ),
       bottomNavigationBar: widget.bottomNavigationBar,
     );
@@ -121,29 +131,12 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
   @override
   void dispose() {
     super.dispose();
-    widget._manager.oauthCallbackReceived.removeListener(_onOauthCallback);
   }
 
   @override
   void initState() {
     super.initState();
     titleCtrl.text = widget._config.title;
-    widget._manager.oauthCallbackReceived.addListener(_onOauthCallback);
-  }
-
-  _onOauthCallback() async {
-    final callback = widget._manager.oauthCallbackReceived.value;
-    if (callback?.service == widget._config.service &&
-        callback?.challenge == _challenge) {
-      // Complete OAuth flow
-      try {
-        await widget._manager.completeOauth(widget._config, callback?.uri);
-      } catch (e) {
-        print('_onOauthCallback error: $e');
-        showMessage(context, 'Something is not good');
-        rethrow;
-      }
-    }
   }
 
   _save(BuildContext ctx) async {
@@ -160,11 +153,17 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
     }
   }
 
-  _startOAuth(BuildContext ctx) async {
+  _makeOauthFlow(BuildContext ctx) async {
     try {
-      _challenge = await widget._manager.startOauth(widget._config.service);
+      final uri = await widget._manager.buildOauthUri(widget._config.service);
+      final data = await _OauthWebDialog.open(ctx, uri);
+      print('_startOAuth: data: $data');
+      if (data == null) return null;
+      await widget._manager.completeOauth(widget._config, data);
+      showMessage(ctx, 'Authorization successful');
     } catch (e) {
       print('_startOAuth error: $e');
+      showMessage(ctx, 'Something is not good');
     }
   }
 
@@ -203,10 +202,11 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
         widget._config.mode,
         (value) => setState(() => widget._config.mode = value)));
     if (widget._provider.oauth()) {
-      items.add(RaisedButton(
-        onPressed: () => _startOAuth(context),
-        child: Text('Authorize'),
-      ));
+      items.add(Builder(
+          builder: (ctx) => RaisedButton(
+                onPressed: () => _makeOauthFlow(ctx),
+                child: Text('Authorize'),
+              )));
     }
     final actions = <Widget>[];
     if (widget._config.id != null) {
@@ -226,5 +226,55 @@ class _SyncConfigEditorState extends State<_SyncConfigEditor> {
         child: Icon(Icons.done),
       ),
     );
+  }
+}
+
+class _OauthWebDialog extends StatefulWidget {
+  final Uri _uri;
+
+  _OauthWebDialog(this._uri);
+
+  static Future<Map> open(BuildContext ctx, Uri uri) {
+    return Navigator.push(
+        ctx,
+        MaterialPageRoute(
+            builder: (ctx) => _OauthWebDialog(uri), fullscreenDialog: true));
+  }
+
+  @override
+  State<StatefulWidget> createState() => _OauthWebDialogState();
+}
+
+class _OauthWebDialogState extends State<_OauthWebDialog> {
+  _onOauthMessage(BuildContext ctx, JavascriptMessage message) {
+    print('Received message: $message');
+    try {
+      final data = jsonDecode(message.message);
+      return Navigator.pop(context, data);
+    } catch (e) {
+      print('Not a message: $e');
+    }
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+        appBar: AppBar(
+          title: Text('Application Authorization'),
+        ),
+        body: Builder(
+          builder: (ctx) => WebView(
+            initialUrl: widget._uri.toString(),
+            javascriptMode: JavascriptMode.unrestricted,
+            gestureNavigationEnabled: true,
+            javascriptChannels: [
+              JavascriptChannel(
+                name: 'oauth',
+                onMessageReceived: (msg) => _onOauthMessage(ctx, msg),
+              )
+            ].toSet(),
+          ),
+        ));
   }
 }

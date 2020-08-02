@@ -118,11 +118,4 @@ class CommService : ConnectableService() {
             else -> return null
         }
     }
-
-    fun openUri(activity: Activity, uri: String) {
-        Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
-            setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            activity.startActivity(this)
-        }
-    }
 }

@@ -118,11 +118,6 @@ class MainActivity : FlutterActivity() {
         Log.d("Main", "Sync call: ${call.method} - ${call.arguments}")
         when (call.method) {
             "getSecrets" -> commService.with { result.success(it.getSecrets(call.arguments as String?)) }
-            "openUri" -> commService.with {
-                val args = call.arguments as Map<String, Any?>
-                it.openUri(this, args["uri"] as String)
-                result.success(null)
-            }
         }
 
     }
@@ -217,11 +212,4 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        Log.d("Main", "onNewIntent: ${intent.data}")
-        if (intent.data.toString().startsWith(OAUTH_CALLBACK_URI, true)) {
-            syncChannel.invokeMethod("oauthCallbackReceived", intent.data.toString())
-        }
-    }
 }
