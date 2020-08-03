@@ -198,8 +198,11 @@ class ConnectedSensorHandler extends SensorHandler {
       if (data.containsKey(element)) result['sensor_$element'] = data[element];
     });
     if (data.containsKey('speed_ms')) {
-      result['speed_ms'] = data['speed_ms'];
-      result['pace_sm'] = 1.0 / data['speed_ms'];
+      final value = data['speed_ms'] ?? 0.0;
+      if (value > 0) {
+        result['speed_ms'] = data['speed_ms'];
+        result['pace_sm'] = 1.0 / data['speed_ms'];
+      }
     }
     final last = _last(trackpoints);
     if (last == null) return result;
