@@ -400,7 +400,7 @@ ChartSeries chartsMake(
   entries = entries.map((e) {
     return MapEntry(e.key, _valueNormalized(e.value));
   }).toList();
-  entries = _simplify(entries, 300);
+  entries = _simplify(entries, 500);
 
   charts.RangeAnnotation averageAnn;
   charts.RangeAnnotation zonesAnn;
@@ -433,9 +433,9 @@ ChartSeries chartsMake(
   final series = charts.Series<MapEntry<int, double>, int>(
       id: id,
       colorFn: (entry, index) => charts.ColorUtil.fromDartColor(color.shade400),
-      strokeWidthPxFn: (entry, index) =>
-          entry.value < 0 || entry.value > 100 ? 1 : 2,
       domainFn: (entry, index) => entry.key,
+      areaColorFn: (entry, index) =>
+          charts.ColorUtil.fromDartColor(color.shade400.withOpacity(0.2)),
       measureFn: (entry, index) => _entryValue(entry.value),
       data: entries);
   if (renderer != null) series.setAttribute(charts.rendererIdKey, renderer);
