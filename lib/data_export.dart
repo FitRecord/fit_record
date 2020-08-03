@@ -132,14 +132,12 @@ class TCXExport extends Exporter {
             if (cadence != null) {
               final value = (cadence / 2).round().toString();
               items.add(xmlElement('Cadence', value));
-              ext.add(xmlElement('RunCadence', value, ns: "tcx"));
+              ext.add(xmlElement('RunCadence', value));
             }
             final power = dataValue(tp.data, null, 'power');
-            if (power != null)
-              ext.add(xmlElement('Watts', power.toString(), ns: "tcx"));
+            if (power != null) ext.add(xmlElement('Watts', power.toString()));
             final speed = dataValue(tp.data, null, 'speed_ms');
-            if (speed != null)
-              ext.add(xmlElement('Speed', speed.toString(), ns: "tcx"));
+            if (speed != null) ext.add(xmlElement('Speed', speed.toString()));
             if (ext.isNotEmpty)
               items.add(xmlElement('Extensions', '',
                   children: [xmlElement('TPX', '', children: ext, ns: "tcx")]));
@@ -166,6 +164,17 @@ class TCXExport extends Exporter {
         XmlEndElementEvent("Track"),
         XmlEndElementEvent("Lap"),
       ];
+      yield streamNode(xmlElement('Creator', '', attr: [
+        xmlAttr('xsi:type', 'Device_t')
+      ], children: [
+        xmlElement('Name', 'FitRecord'),
+        xmlElement('UnitId', '0'),
+        xmlElement('ProductID', '0'),
+        xmlElement('Version', '', children: [
+          xmlElement('VersionMajor', '0'),
+          xmlElement('VersionMinor', '0'),
+        ])
+      ]));
       yield streamNode(xmlElement('Extensions', '', children: [
         xmlElement('FitRecord', '', children: [
           xmlElement('Title', record.title ?? ''),
@@ -180,6 +189,22 @@ class TCXExport extends Exporter {
       yield <XmlEvent>[
         XmlEndElementEvent("Activity"),
         XmlEndElementEvent("Activities"),
+      ];
+      yield streamNode(xmlElement('Author', '', attr: [
+        xmlAttr('xsi:type', 'Application_t')
+      ], children: [
+        xmlElement('Name', 'FitRecord'),
+        xmlElement('LangID', 'EN'),
+        xmlElement('PartNumber', 'XXX-XXXXX-XX'),
+        xmlElement('Build', '', children: [
+          xmlElement('Version', '', children: [
+            xmlElement('VersionMajor', '0'),
+            xmlElement('VersionMinor', '0'),
+          ]),
+        ]),
+      ]));
+
+      yield <XmlEvent>[
         XmlEndElementEvent("TrainingCenterDatabase"),
       ];
     }
