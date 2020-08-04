@@ -132,12 +132,15 @@ abstract class SyncProvider {
     if (oauth()) {
       final tokenUri = _refreshTokenUri();
       if (config.secretsJson == null) return false;
+      if (!textIsNotEmpty(config.secretsJson['refresh_token'])) return false;
       final newSecrets = await _oauthTokenExchange(
         tokenUri,
         secrets['client_id'],
         secrets['client_secret'],
         token: config.secretsJson['refresh_token'],
       );
+      if (newSecrets['refresh_token'] == null)
+        newSecrets['refresh_token'] = config.secretsJson['refresh_token'];
       config.secretsJson = newSecrets;
       return true;
     }
